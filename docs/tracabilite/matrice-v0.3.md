@@ -32,7 +32,7 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | Recherche bibliographique multi-bases | §10 | US-BIBLIO-001 | **P0** | À implémenter |
 | Import DOI / BibTeX / RIS | §10 | US-IMPORT-001 | P1 | À implémenter |
 | Synchronisation Zotero | §10 | US-ZOTERO-001 | P2 | Non planifié |
-| Base de connaissances vectorielle | §4.3, §7 | US-002, US-102 | P0 | À implémenter |
+| Base de connaissances vectorielle | §4.3, §7 | US-002, US-102 | P0 | US-002 livrée · US-102 à implémenter |
 | Filtres avancés du RAG | §7.2, §7.3 | US-RAG-002 | P1 | À implémenter |
 | Génération de problématique et de plan | §5.2 | **US-PLAN-001** | **P0** | À implémenter |
 | Édition et validation du plan | §5.2 | US-PLAN-001 | P0 | À implémenter |
@@ -50,7 +50,7 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | Modèle académique paramétrable | §9.2 | US-EXPORT-002 | P1 | À implémenter |
 | Déclaration d'usage de l'IA | §9.5 | **US-EXPORT-003** | P1 | À implémenter |
 | Anti-plagiat, étendue choisie par l'auteur | §11.4, §11.5 | US-601 | P1 | À implémenter |
-| Journal d'audit | §11.1 | US-701 | P0 | À implémenter |
+| Journal d'audit | §11.1 | US-701 | P0 | **Livrée** |
 | Rôles et authentification locale | — | US-AUTH-001 | P1 | À implémenter |
 | Tableau de bord d'avancement | — | US-DASH-001 | P1 | À implémenter |
 | Mode pipeline automatique | §5.2 | US-WORKFLOW-001 | P1 | À implémenter |
@@ -74,8 +74,8 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | `sqlite-vec`, séparation `chunk`/`vec_chunk` | ADR-002 | §4.3 | US-002 | `check_sqlite_vec.py`, `test_rowid_invariant_chunk_vec` |
 | FK réellement appliquées | ADR-002 | §4.3 | US-002 | `test_foreign_keys_enforced_on_chunk` |
 | Cascade vectorielle par trigger | ADR-002 | §4.3 | US-002 | `test_cascade_delete_source_removes_vectors` |
-| Modèle LLM unique persistant | ADR-003 | §6.1 | US-003 | `check_llm_latency.py`, `test_no_weights_reload_between_requests` |
-| Prompts système stables | ADR-003 | §6.2 | US-003 | `test_system_prompt_byte_stable` |
+| Modèle LLM unique persistant | ADR-003 | §6.1 | US-003 | `check_llm_latency.py`, `test_load_duration_below_threshold_on_second_request` |
+| Prompts système stables | ADR-003 | §6.2 | US-003 | `test_system_prompt_byte_stable_across_calls`, `test_prompts_are_module_level_constants` |
 | Option second modèle code | ADR-003 | §6.3 | US-003 | `test_code_model_refused_below_12gb` |
 | Budget VRAM global | ADR-003 | §12.3 | **US-006** | `check_vram_budget.py`, `test_vram_budget` |
 | Graphe déterministe | ADR-004 | §5.2 | US-201 | `test_transition_persisted`, `test_resume_after_restart` |
@@ -93,7 +93,7 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | Renvois croisés résolus | ADR-006 | §9.2 | US-502 | `test_crossrefs_resolved_in_pdf`, `check_quarto_export.py` |
 | `.bib` généré | ADR-007 | §9.3 | US-501 | `test_bibtex_contains_only_cited` |
 | Export bloqué sur citation invalide | ADR-007 | §9.3 | US-501 | `test_export_fails_on_unverified_citation` |
-| Audit à détection d'altération | ADR-009 | §11.1 | US-701 | `test_hash_chain_valid`, `test_tamper_detection_returns_index` |
+| Audit à détection d'altération | ADR-009 | §11.1 | US-701 | `test_chain_valid_over_500_entries`, `test_tamper_detection_returns_index_and_id` |
 | Vocabulaire non trompeur | ADR-009 | §11.1 | US-701 | `test_wording_no_immutable_claim` |
 | Local strict par défaut | ADR-010 | §11.3 | Transverse | `check_no_cloud_calls.py` |
 | Consentement par périmètre | ADR-010 | §11.3 | US-BIBLIO-001, US-601 | `test_consent_recorded_and_revocable` |
@@ -113,9 +113,9 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 
 | ID | Titre | Priorité | Dépendances | Prompt d'implémentation | Statut |
 |---|---|---|---|---|---|
-| US-001 | Backend FastAPI + aiosqlite WAL | P0 | — | ✅ Prompt Pack V0.2 | Prêt |
-| **US-002** | Schéma SQLite + sqlite-vec | P0 | US-001 | ✅ `PROMPT-US-002.md` | Prêt |
-| US-003 | LLM Manager persistant | P0 | — | ✅ `PROMPT-US-003.md` | Prêt |
+| US-001 | Backend FastAPI + aiosqlite WAL | P0 | — | ✅ Prompt Pack V0.2 | **Livrée** |
+| **US-002** | Schéma SQLite + sqlite-vec | P0 | US-001 | ✅ `PROMPT-US-002.md` | **Livrée** |
+| US-003 | LLM Manager persistant | P0 | — | ✅ `PROMPT-US-003.md` | **Livrée** |
 | US-004 | Sandbox à deux niveaux | P0 | US-001 | ✅ `PROMPT-US-004.md` | Prêt |
 | **US-005** | Embeddings CPU hors Ollama | P0 | US-002 | ✅ `PROMPT-US-005.md` | Prêt |
 | **US-006** | Budget VRAM en CI | P0 | US-003, US-005 | ✅ `PROMPT-US-006.md` | Prêt |
@@ -132,7 +132,7 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | US-502 | Export Quarto | P1 | US-501 | ✅ `PROMPT-US-501-502.md` | Prêt |
 | US-EXPORT-003 | Déclaration d'usage de l'IA | P1 | US-701, US-502 | ✅ `PROMPT-US-EXPORT-003.md` | Prêt |
 | US-601 | Anti-plagiat avec consentement | P1 | US-502 | ✅ `PROMPT-US-601.md` | Prêt |
-| US-701 | Journal d'audit | P0 | US-001 | ✅ `PROMPT-US-701.md` | Prêt |
+| US-701 | Journal d'audit | P0 | US-001 | ✅ `PROMPT-US-701.md` | **Livrée** |
 | US-801 | Layout IDE Angular | P1 | API v1 | ✅ `PROMPT-US-801.md` | Prêt |
 | US-AUTH-001 | Rôles locaux | P1 | US-101 | ✅ `PROMPT-US-AUTH-001.md` | Prêt |
 | US-DATA-001 | Dépôt de datasets | P1 | US-004 | ✅ `PROMPT-US-DATA-001.md` | Prêt |
@@ -198,3 +198,33 @@ l'implémentation.
   stabilisera à l'usage, la structure est posée par US-003.
 - Gabarits LaTeX d'établissements — hors périmètre par décision
   (US-EXPORT-002).
+
+---
+
+## 6. État d'implémentation — mise à jour du 7 septembre 2026
+
+Quatre stories livrées, vérifiées sur poste Windows 11 / RTX 3080 10 Go.
+
+| Story | Vérifications passantes |
+|---|---|
+| US-001 | `pytest` · `ruff` · `check_sqlite_wal.py` 5/5 · `check_no_cloud_calls.py` |
+| US-002 | `check_sqlite_vec.py` 9/9 |
+| US-003 | `check_llm_latency.py` — `load_duration` mesuré entre 1,7 et 13,9 ms |
+| US-701 | `check_audit_chain.py` 6/6 — altération détectée à l'index 2500 sur 5000 |
+
+115 tests unitaires passants, 2 tests d'intégration désélectionnés.
+
+Toutes les autres stories restent **Prêt** : leur prompt existe, aucun code
+ne les implémente.
+
+### Écarts consignés
+
+- **`test_no_write_queue_in_codebase`** et **`test_application_code_never_imports_sqlite3`**
+  ajoutés à US-001 : la matrice les exigeait, aucun prompt ne les portait.
+- **`transaction()` ouvre `BEGIN IMMEDIATE`**, non `BEGIN`. Une transaction
+  différée qui lit avant d'écrire reçoit un `SQLITE_BUSY` immédiat sans
+  honorer `busy_timeout` : la promesse d'ADR-001 ne tient pas autrement.
+  Défaut trouvé par le test de concurrence de US-701.
+- **Migration `002_audit_chain.sql`** créée hors des listes de fichiers de
+  US-002 et US-701, l'index unique de chaînage n'étant rattaché à aucun
+  périmètre alors que US-701 l'exige.

@@ -314,3 +314,27 @@ async def test_time_to_first_token_below_threshold() -> None:
     ttft_ms = (time.perf_counter() - debut) * 1000
     await backend.aclose()
     assert ttft_ms < settings.llm_max_ttft_ms
+
+
+async def test_context_size_identical_on_every_request() -> None:
+    """Ollama recharge les poids quand `num_ctx` change.
+
+    Un prechauffage au contexte par defaut serait annule par la premiere
+    generation reelle. Sur le poste cible, ce rechargement coute 7 min 44 s :
+    la stabilite de `num_ctx` est aussi structurante que `keep_alive=-1`.
+    """
+    bodies: list[dict] = []
+    backend = mock_backend(default_handler(bodies))
+    manager = LLMManager(backend)
+    await manager.startup()
+    await manager.generate_for_agent(AgentName.PLAN, "sujet")
+    await manager.generate_for_agent(AgentName.WRITER, "autre sujet")
+    async for _ in manager.stream_for_agent(AgentName.CODE, "sujet"):
+        pass
+    await backend.aclose()
+
+    contextes = {b.get("options", {}).get("num_ctx") for b in bodies}
+    assert len(bodies) >= 4, "prechauffage et generations doivent etre observes"
+    assert contextes == {get_settings().llm_context_tokens}, (
+        f"num_ctx varie entre requetes : {contextes}"
+    )

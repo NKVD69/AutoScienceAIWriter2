@@ -54,7 +54,9 @@ L'API est liée à la boucle locale et n'est jamais exposée sur le réseau.
 .venv/Scripts/python -m ruff format --check backend/ scripts/
 .venv/Scripts/python scripts/check_sqlite_wal.py
 .venv/Scripts/python scripts/check_sqlite_vec.py
+.venv/Scripts/python scripts/check_audit_chain.py
 .venv/Scripts/python scripts/check_no_cloud_calls.py
+.venv/Scripts/python scripts/check_llm_latency.py   # si Ollama disponible
 ```
 
 Un script indisponible faute d'environnement — pas de GPU, pas d'Ollama, pas de
@@ -66,9 +68,11 @@ Quarto — sort en code 2 : ce n'est pas un échec. Un script qui sort en 1 en e
 |---|---|---|
 | US-001 | Backend FastAPI + aiosqlite WAL | livrée |
 | US-002 | Schéma SQLite unique + sqlite-vec | livrée |
-| US-003 | LLM Manager, modèle unique persistant | à faire |
+| US-003 | LLM Manager, modèle unique persistant | livrée |
+| US-701 | Journal d'audit à détection d'altération | livrée |
 | US-005 | Embeddings CPU hors Ollama | à faire |
 | US-101 | CRUD projets, registre, sauvegarde | à faire |
+| US-102 | Import de sources et ingestion RAG | à faire |
 
 Chemin critique complet et ordre de traitement : [`docs/plan-execution.md`](docs/plan-execution.md).
 
@@ -76,3 +80,7 @@ Chemin critique complet et ordre de traitement : [`docs/plan-execution.md`](docs
 
 Résultats et méthode dans [`spikes/RESULTATS.md`](spikes/RESULTATS.md).
 Le spike 01 (sqlite-vec) est conforme sous Linux **et** sous Windows.
+L'addendum du 7 septembre 2026 consigne trois constats d'environnement
+mesurés sur le poste cible, dont un chargement de modèle à froid de
+7 min 44 s qui rend la persistance d'ADR-003 indispensable et non
+optionnelle.

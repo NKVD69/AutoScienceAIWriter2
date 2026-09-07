@@ -113,3 +113,45 @@ async def test_cascade_delete(project_db: Path) -> None:
         async with conn.execute("SELECT count(*) FROM child") as cur:
             row = await cur.fetchone()
     assert row is not None and row[0] == 0
+
+
+def test_no_write_queue_in_codebase() -> None:
+    """ADR-001 : aucune file d'écriture applicative devant SQLite.
+
+    Exigé par la matrice de traçabilité. Une file bloquante placée devant
+    SQLite bloque l'event loop de FastAPI : elle déplace le problème au lieu
+    de le résoudre, et WAL rend la sérialisation applicative inutile.
+    """
+    app_root = Path(__file__).resolve().parents[2] / "app"
+    interdits = ("DbWriteQueue", "write_queue", "WriteQueue")
+    fautes = [
+        f"{path.relative_to(app_root)} : {motif}"
+        for path in sorted(app_root.rglob("*.py"))
+        for motif in interdits
+        if motif in path.read_text(encoding="utf-8")
+    ]
+    assert not fautes, "file d'écriture applicative détectée :\n" + "\n".join(fautes)
+
+
+def test_application_code_never_imports_sqlite3() -> None:
+    """ADR-001 : `aiosqlite` exclusivement dans le code applicatif.
+
+    La règle ruff TID251 le vérifie déjà ; ce test la double parce qu'une
+    règle de lint se désactive par un commentaire, pas un test.
+    """
+    import ast
+
+    app_root = Path(__file__).resolve().parents[2] / "app"
+    fautes: list[str] = []
+    for path in sorted(app_root.rglob("*.py")):
+        arbre = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for noeud in ast.walk(arbre):
+            if isinstance(noeud, ast.Import):
+                fautes += [
+                    f"{path.relative_to(app_root)}:{noeud.lineno}"
+                    for a in noeud.names
+                    if a.name == "sqlite3"
+                ]
+            elif isinstance(noeud, ast.ImportFrom) and noeud.module == "sqlite3":
+                fautes.append(f"{path.relative_to(app_root)}:{noeud.lineno}")
+    assert not fautes, "import sqlite3 dans le code applicatif :\n" + "\n".join(fautes)

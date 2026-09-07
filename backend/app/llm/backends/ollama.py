@@ -77,6 +77,13 @@ class OllamaBackend:
         Le modèle absent n'est **pas** téléchargé : le téléchargement relève
         du consentement `model_download` (ADR-010), pas d'un effet de bord au
         démarrage.
+
+        **`num_ctx` est passé dès le préchauffage.** Ollama recharge
+        intégralement les poids lorsque la taille de contexte change : un
+        préchauffage au contexte par défaut serait annulé par la première
+        génération réelle, qui paierait le chargement complet. Mesuré à
+        7 min 44 s sur le poste cible (spikes/RESULTATS.md, addendum) — soit
+        exactement la latence qu'ADR-003 cherche à éliminer.
         """
         health = await self.health()
         if not health.available:
@@ -84,7 +91,14 @@ class OllamaBackend:
         if not health.expected_model_present:
             raise ModelNotFoundError.with_pull_command(self.model)
 
-        await self._post("/api/generate", {"model": self.model, "keep_alive": KEEP_ALIVE})
+        await self._post(
+            "/api/generate",
+            {
+                "model": self.model,
+                "keep_alive": KEEP_ALIVE,
+                "options": {"num_ctx": get_settings().llm_context_tokens},
+            },
+        )
         logger.info("Modèle %s résident (keep_alive=%s)", self.model, KEEP_ALIVE)
 
     # --- Génération ------------------------------------------------------

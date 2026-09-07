@@ -115,3 +115,77 @@ pire qu'absent : il ferait rouvrir ADR-006 pour un `tlmgr install` manquant.
 Trois d'entre elles peuvent être menées en une demi-journée sur le poste cible.
 Le spike 02 est le seul qui puisse rouvrir un ADR structurant ; c'est celui à
 faire en premier.
+
+---
+
+# Addendum — exécution sur poste Windows, 7 septembre 2026
+
+Poste : Windows 11 · Python 3.11.15 (uv) · SQLite 3.53.1 · RTX 3080, 10 Go ·
+Ollama présent, `qwen2.5:7b-instruct-q4_K_M` **absent**.
+
+| Spike | Verdict Windows | Écart avec la mesure Linux |
+|---|---|---|
+| 01 | **Conforme, 10/10** | aucun |
+| 02 | **Non mesuré** — modèle d'ADR-003 absent, substitut non concluant | — |
+| 03 | non exécuté | — |
+| 04 | non exécutable — Quarto absent du poste | — |
+
+## Spike 01 — conforme sous Windows
+
+Le point ouvert depuis la mesure Linux est levé : l'interpréteur Python de ce
+poste supporte les extensions SQLite chargeables, et `sqlite-vec` v0.1.9 se
+charge sans remédiation.
+
+```
+extension chargée · WAL actif · foreign_keys actif
+FK sur vec0 ignorée (attendu) · FK appliquée sur chunk · invariant rowid
+cascade relationnelle · cascade vectorielle par trigger
+indexation 19,9 s · KNN simple p50 193,1 ms, p95 199,8 ms
+                    KNN filtré p50 169,7 ms, p95 209,7 ms
+fichier : 151 Mo pour 50 000 chunks
+```
+
+**Réserve : le KNN simple passe à 0,2 ms du budget.** `p95 = 199,8 ms` pour un
+plafond de 200 ms n'est pas une marge, c'est une coïncidence. La cible de
+§12.2 doit être considérée comme atteinte *à la limite* sur ce matériel, et
+toute régression — chunk plus long, dimension supérieure, disque plus lent —
+la fera basculer. À surveiller lors de US-102.
+
+## Spike 02 — toujours non mesuré, et deux constats d'environnement
+
+Le modèle exact d'ADR-003 n'est pas installé. Il n'a pas été téléchargé :
+`model_download` est refusé par défaut (ADR-010), et une décision de
+télécharger 5 Go revient à l'utilisateur. Le spike a été tenté contre
+`qwen3.5:latest` (9,7 B, Q4_K_M) à titre indicatif ; il a expiré deux fois.
+
+**Constat 1 — le chargement à froid d'un modèle prend 7 min 44 s sur ce
+poste.** Mesuré au chronomètre sur une requête de préchauffage. Le spike
+abandonne à 300 s : son délai n'est pas dimensionné pour cette machine.
+
+Ce chiffre change la lecture d'ADR-003. La décision de modèle unique
+persistant y était justifiée par une latence de swap « de plusieurs secondes
+à plusieurs dizaines de secondes ». Ici, un déchargement coûte **près de huit
+minutes** de réchauffage. La persistance n'est pas une optimisation de
+confort : sans elle, l'outil est inutilisable sur ce poste.
+
+**Constat 2 — changer `num_ctx` force un rechargement complet.** Le
+préchauffage sans `num_ctx` puis une requête avec `num_ctx: 8192` provoque un
+second chargement de sept minutes. Conséquence directe pour US-003 : la
+valeur de `num_ctx` doit être **identique sur toutes les requêtes de tous les
+agents**, au même titre que le prompt système. Une variation par agent
+annulerait la persistance aussi sûrement qu'un `keep_alive=0`.
+
+**Constat 3 — la VRAM est disputée.** Hors modèle chargé, `nvidia-smi`
+rapporte déjà 8,7 Go occupés sur 10 Go par d'autres processus du poste. Le
+budget de §12.1 — plafond observé < 9,0 Go — suppose une carte
+essentiellement libre. Sur un poste de travail réel, l'hypothèse ne tient
+pas, et une tentative de chargement dans ces conditions renvoie un 500
+d'Ollama. À prendre en compte dans US-006.
+
+## Ce qui reste à mesurer
+
+| Mesure | Condition |
+|---|---|
+| Spike 02 en entier | `ollama pull qwen2.5:7b-instruct-q4_K_M`, délai du script porté au-delà de 600 s, GPU dégagé |
+| Spike 03 | distribution Pyodide vendorisée complète |
+| Spike 04 | Quarto + TinyTeX installés sur le poste |
