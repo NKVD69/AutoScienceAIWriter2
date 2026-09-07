@@ -1,0 +1,4 @@
+sqlite-vec>=0.1.6
+httpx>=0.27
+pydantic>=2.7
+PyMuPDF>=1.24   # optionnel : compte de pages et vérification des libellés (spike 04)

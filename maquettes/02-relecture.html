@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maquette 2 — Relecture d'une section</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=Spectral:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --papier:#FBFAF7; --encre:#1B2430; --filet:#D8D6CF; --gris:#6B7280;
+  --source:#2F6B54; --crayon:#3A5FA8; --epreuve:#A6402E; --graphite:#4A4A4A;
+  --panneau:#F4F2ED; --ambre:#8A6410;
+  --serif:"Spectral",Georgia,serif; --sans:"Archivo",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--papier); color:var(--encre); font-family:var(--sans); font-size:15px; line-height:1.5}
+.app{display:grid; grid-template-rows:auto 1fr auto; height:100%}
+
+.bandeau{display:flex; align-items:baseline; gap:1.5rem; flex-wrap:wrap; padding:.85rem 1.5rem; border-bottom:1px solid var(--filet)}
+.fil{font-size:.85rem; color:var(--gris)} .fil b{font-weight:500; color:var(--encre)}
+.etat{margin-left:auto; font-size:.8rem; color:var(--gris); border:1px solid var(--filet); border-radius:2px; padding:.2rem .55rem}
+
+.plan{display:grid; grid-template-columns:minmax(0,1fr) 27rem; min-height:0}
+@media (max-width:64rem){.plan{grid-template-columns:1fr}}
+
+/* ---- texte relu ---- */
+.texte{overflow-y:auto; padding:2.5rem 2rem 3rem}
+.texte-corps{max-width:38rem; margin:0 auto}
+.texte h1{font-family:var(--serif); font-weight:500; font-size:1.5rem; margin:0 0 1.75rem}
+.texte p{font-family:var(--serif); font-size:1.0625rem; line-height:1.75; margin:0 0 1.35rem; text-align:justify; hyphens:auto}
+
+.vise{background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;text-align:inherit}
+.vise[data-sev="bloquant"]{text-decoration:underline dashed var(--epreuve); text-decoration-thickness:1.5px; text-underline-offset:.22em}
+.vise[data-sev="majeur"]{text-decoration:underline dashed var(--ambre); text-decoration-thickness:1.5px; text-underline-offset:.22em}
+.vise[data-sev="mineur"]{text-decoration:underline dotted var(--gris); text-underline-offset:.22em}
+.vise:hover{background:#EDEAE2}
+.vise:focus-visible{outline:2px solid var(--crayon); outline-offset:2px}
+.vise[aria-current="true"]{background:#E6E2D6}
+
+/* ---- panneau de relecture ---- */
+.revue{border-left:1px solid var(--filet); background:var(--panneau); overflow-y:auto; padding:1.5rem 1.35rem 2rem}
+@media (max-width:64rem){.revue{border-left:0; border-top:1px solid var(--filet)}}
+.revue h2{font-size:.8rem; font-weight:600; margin:0 0 .2rem}
+.revue .sous{font-size:.78rem; color:var(--gris); margin:0 0 1.5rem; line-height:1.55}
+
+/* barres de qualité — pas de note globale, pas de jauge */
+.mesures{border-top:1px solid var(--filet); border-bottom:1px solid var(--filet); padding:1rem 0; margin-bottom:1.4rem}
+.mesure{display:grid; grid-template-columns:8.5rem 1fr auto; align-items:center; gap:.6rem; margin-bottom:.55rem; font-size:.82rem}
+.mesure:last-child{margin-bottom:0}
+.mesure .nom{color:var(--gris)}
+.mesure .nom b{color:var(--encre); font-weight:500}
+.jauge{height:6px; background:#E4E1D8; border-radius:1px; overflow:hidden}
+.jauge i{display:block; height:100%; background:var(--graphite)}
+.jauge i.fort{background:var(--source)}
+.jauge i.faible{background:var(--ambre)}
+.jauge i.critique{background:var(--epreuve)}
+.mesure .val{font-variant-numeric:tabular-nums; font-size:.78rem; color:var(--gris); min-width:2.6rem; text-align:right}
+.note-mesure{font-size:.75rem; color:var(--gris); line-height:1.55; margin:.9rem 0 0}
+
+/* liste des remarques */
+.groupe{margin-bottom:1.5rem}
+.groupe h3{font-size:.78rem; font-weight:600; margin:0 0 .6rem; display:flex; align-items:center; gap:.4rem}
+.pastille{display:inline-block; width:.55rem; height:.55rem; border-radius:50%}
+.p-bloquant{background:var(--epreuve)} .p-majeur{background:var(--ambre)} .p-mineur{background:var(--gris)}
+
+.remarque{
+  background:var(--papier); border:1px solid var(--filet); border-left-width:3px;
+  padding:.75rem .85rem; margin-bottom:.55rem; cursor:pointer;
+}
+.remarque:hover{border-color:var(--encre)}
+.remarque:focus-visible{outline:2px solid var(--crayon); outline-offset:1px}
+.remarque[data-sev="bloquant"]{border-left-color:var(--epreuve)}
+.remarque[data-sev="majeur"]{border-left-color:var(--ambre)}
+.remarque[data-sev="mineur"]{border-left-color:var(--gris)}
+.remarque .cat{font-size:.68rem; color:var(--gris); margin-bottom:.3rem}
+.remarque .msg{font-size:.86rem; line-height:1.55; margin:0 0 .45rem}
+.remarque .cite{font-family:var(--serif); font-size:.82rem; color:var(--gris); line-height:1.5; border-left:2px solid var(--filet); padding-left:.6rem}
+.remarque .prop{font-size:.8rem; color:var(--source); margin-top:.5rem; line-height:1.5}
+.remarque.traitee{opacity:.5}
+.remarque.traitee .msg{text-decoration:line-through}
+
+.origine{
+  font-size:.75rem; color:var(--gris); line-height:1.6;
+  border-top:1px solid var(--filet); padding-top:.9rem; margin-top:.2rem;
+}
+
+/* ---- porte de validation ---- */
+.porte{
+  border-top:1px solid var(--filet); background:var(--papier);
+  padding:1rem 1.5rem; display:grid; grid-template-columns:1fr auto; gap:1.5rem; align-items:center;
+}
+@media (max-width:52rem){.porte{grid-template-columns:1fr}}
+.porte .avert{font-size:.82rem; line-height:1.6; max-width:44rem}
+.porte .avert b{font-weight:500}
+.porte .reste{color:var(--epreuve); font-weight:500}
+.groupe-actions{display:flex; gap:.6rem; flex-wrap:wrap; justify-content:flex-end}
+button{font-family:var(--sans); cursor:pointer; border-radius:2px}
+button:focus-visible{outline:2px solid var(--crayon); outline-offset:2px}
+.valider{
+  font-size:.88rem; padding:.6rem 1rem; background:var(--encre); color:var(--papier);
+  border:1px solid var(--encre); font-weight:500;
+}
+.valider:hover{background:#000}
+.secondaire{font-size:.82rem; padding:.6rem .9rem; background:var(--papier); color:var(--encre); border:1px solid var(--filet)}
+.secondaire:hover{border-color:var(--encre)}
+
+dialog{border:1px solid var(--encre); border-radius:2px; padding:1.5rem; max-width:32rem; background:var(--papier); color:var(--encre)}
+dialog::backdrop{background:rgba(27,36,48,.35)}
+dialog h3{margin:0 0 .7rem; font-size:1rem; font-weight:600}
+dialog p{font-size:.88rem; line-height:1.65; margin:0 0 1rem}
+dialog .liste{font-size:.85rem; border-left:2px solid var(--epreuve); padding-left:.8rem; margin-bottom:1.2rem; line-height:1.7}
+dialog .fin{display:flex; gap:.6rem; justify-content:flex-end}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="bandeau">
+    <div class="fil">Microplastiques et fonction rénale &rsaquo; 2. État de l'art &rsaquo; <b>2.3 Mécanismes d'accumulation tissulaire</b></div>
+    <div class="etat">Relue · en attente de votre décision</div>
+  </header>
+
+  <div class="plan">
+
+    <main class="texte">
+      <div class="texte-corps">
+        <h1>2.3 Mécanismes d'accumulation tissulaire</h1>
+
+        <p>Les travaux conduits sur les cétacés échoués le long des côtes atlantiques
+        ont établi la présence de particules de polyéthylène dans le parenchyme rénal
+        de treize individus sur dix-sept.</p>
+
+        <p><button class="vise" data-sev="majeur" data-id="r2">Cette distribution suggère un franchissement de la barrière glomérulaire par les fractions les plus fines</button>,
+        mécanisme dont la cinétique reste mal caractérisée. Les études menées sur
+        modèle murin rapportent une rétention préférentielle des particules
+        inférieures à 5 µm au niveau du cortex.</p>
+
+        <p><button class="vise" data-sev="bloquant" data-id="r1">Il est établi que ce seuil dimensionnel s'applique également aux mammifères marins</button>,
+        dont l'architecture néphronique présente des similarités structurelles.</p>
+
+        <p>L'interprétation de ces résultats se heurte à une limite méthodologique :
+        <button class="vise" data-sev="mineur" data-id="r4">les protocoles de digestion tissulaire employés diffèrent d'une équipe à l'autre, et par ailleurs il convient de noter que leur rendement d'extraction n'a fait l'objet d'aucune inter-comparaison publiée à ce jour dans la littérature disponible</button>.</p>
+
+        <p><button class="vise" data-sev="bloquant" data-id="r3">Une méta-analyse de 2024 conclut à une prévalence de 68 % chez les pinnipèdes de l'Atlantique Nord</button>.
+        Ce résultat orienterait la question de recherche vers les conséquences
+        fonctionnelles plutôt que vers la seule quantification de l'exposition.</p>
+      </div>
+    </main>
+
+    <aside class="revue">
+      <h2>Relecture</h2>
+      <p class="sous">Sept remarques. Ce panneau conseille : il ne valide rien.</p>
+
+      <div class="mesures">
+        <div class="mesure">
+          <span class="nom"><b>Sourçage</b> ×0,30</span>
+          <span class="jauge"><i class="critique" style="width:41%"></i></span>
+          <span class="val">41</span>
+        </div>
+        <div class="mesure">
+          <span class="nom">Cohérence ×0,25</span>
+          <span class="jauge"><i class="fort" style="width:82%"></i></span>
+          <span class="val">82</span>
+        </div>
+        <div class="mesure">
+          <span class="nom">Argumentation ×0,20</span>
+          <span class="jauge"><i class="faible" style="width:64%"></i></span>
+          <span class="val">64</span>
+        </div>
+        <div class="mesure">
+          <span class="nom">Complétude ×0,15</span>
+          <span class="jauge"><i class="fort" style="width:78%"></i></span>
+          <span class="val">78</span>
+        </div>
+        <div class="mesure">
+          <span class="nom">Structure ×0,05</span>
+          <span class="jauge"><i class="fort" style="width:88%"></i></span>
+          <span class="val">88</span>
+        </div>
+        <div class="mesure">
+          <span class="nom">Style ×0,05</span>
+          <span class="jauge"><i class="faible" style="width:70%"></i></span>
+          <span class="val">70</span>
+        </div>
+        <p class="note-mesure">Le sourçage pèse le plus lourd : c'est ce qui distingue
+        un mémoire d'un devoir. Complétude et sourçage sont mesurés pour moitié par
+        comptage, pas par appréciation.</p>
+      </div>
+
+      <div class="groupe">
+        <h3><span class="pastille p-bloquant"></span> 2 remarques bloquantes</h3>
+
+        <div class="remarque" data-sev="bloquant" data-id="r1" tabindex="0">
+          <div class="cat">Sourçage · paragraphe 3</div>
+          <p class="msg">Une extrapolation est présentée comme un fait établi. Aucune source ne l'affirme pour les mammifères marins.</p>
+          <p class="cite">« Il est établi que ce seuil dimensionnel s'applique également… »</p>
+          <p class="prop">Proposition : la requalifier en hypothèse — « Il est permis de supposer que… », et énoncer l'absence de donnée directe.</p>
+        </div>
+
+        <div class="remarque" data-sev="bloquant" data-id="r3" tabindex="0">
+          <div class="cat">Sourçage · paragraphe 5</div>
+          <p class="msg">Cette méta-analyse ne figure dans aucune de vos sources approuvées, et le chiffre de 68 % n'est rattaché à aucun extrait.</p>
+          <p class="cite">« Une méta-analyse de 2024 conclut à une prévalence de 68 %… »</p>
+          <p class="prop">Tant que cette citation reste non vérifiée, l'export du document est refusé.</p>
+        </div>
+      </div>
+
+      <div class="groupe">
+        <h3><span class="pastille p-majeur"></span> 2 remarques majeures</h3>
+
+        <div class="remarque" data-sev="majeur" data-id="r2" tabindex="0">
+          <div class="cat">Argumentation · paragraphe 2</div>
+          <p class="msg">Le lien entre la distribution observée et le franchissement glomérulaire n'est pas explicité. Le lecteur doit reconstituer le raisonnement.</p>
+          <p class="cite">« Cette distribution suggère un franchissement de la barrière glomérulaire… »</p>
+        </div>
+
+        <div class="remarque" data-sev="majeur" data-id="r5" tabindex="0">
+          <div class="cat">Complétude · section entière</div>
+          <p class="msg">La section cite 6 sources pour 1 240 mots. Les autres sections de ce chapitre en citent 11 en moyenne.</p>
+        </div>
+      </div>
+
+      <div class="groupe">
+        <h3><span class="pastille p-mineur"></span> 3 remarques mineures</h3>
+
+        <div class="remarque" data-sev="mineur" data-id="r4" tabindex="0">
+          <div class="cat">Style · paragraphe 4</div>
+          <p class="msg">Phrase de 47 mots avec deux incises redondantes.</p>
+          <p class="prop">Proposition : scinder après « d'une équipe à l'autre ».</p>
+        </div>
+
+        <div class="remarque traitee" data-sev="mineur" data-id="r6" tabindex="0">
+          <div class="cat">Structure · paragraphe 1</div>
+          <p class="msg">Paragraphe d'ouverture sans phrase d'annonce.</p>
+        </div>
+
+        <div class="remarque traitee" data-sev="mineur" data-id="r7" tabindex="0">
+          <div class="cat">Style · paragraphe 5</div>
+          <p class="msg">Conditionnel non justifié après un résultat présenté comme acquis.</p>
+        </div>
+      </div>
+
+      <p class="origine">Relecture produite par qwen2.5-7b-instruct le 6 septembre à 14 h 12,
+      deuxième passage. Le premier avait relevé 9 remarques. Vous pouvez comparer les
+      deux versions du texte avant de décider.</p>
+    </aside>
+  </div>
+
+  <footer class="porte">
+    <p class="avert">Valider signifie que <b>vous assumez le contenu de cette section</b> :
+    ses affirmations, ses sources et ses limites. Aucun score ne franchit cette étape à
+    votre place. <span class="reste">2 remarques bloquantes ne sont pas traitées.</span></p>
+    <div class="groupe-actions">
+      <button class="secondaire">Corriger moi-même</button>
+      <button class="secondaire">Relancer la rédaction avec ces remarques</button>
+      <button class="valider" id="btn-valider">Valider cette section</button>
+    </div>
+  </footer>
+</div>
+
+<dialog id="confirm">
+  <h3>Valider malgré 2 remarques bloquantes ?</h3>
+  <p>Elles concernent toutes deux le sourçage :</p>
+  <div class="liste">
+    Une extrapolation présentée comme un fait établi.<br>
+    Une citation non vérifiée : « méta-analyse de 2024 ».
+  </div>
+  <p>Vous pouvez valider : rien ne vous en empêche. La citation non vérifiée
+  <b>bloquera l'export</b> du document tant qu'elle n'aura pas été traitée.</p>
+  <div class="fin">
+    <button class="secondaire" id="annuler">Revenir aux remarques</button>
+    <button class="valider" id="confirmer">Valider et assumer</button>
+  </div>
+</dialog>
+
+<script>
+const vises = [...document.querySelectorAll('.vise')];
+const remarques = [...document.querySelectorAll('.remarque')];
+
+function cibler(id){
+  vises.forEach(v => v.setAttribute('aria-current', String(v.dataset.id === id)));
+  const v = vises.find(x => x.dataset.id === id);
+  if (v) v.scrollIntoView({block:'center', behavior: matchMedia('(prefers-reduced-motion:reduce)').matches ? 'auto':'smooth'});
+}
+remarques.forEach(r => {
+  r.addEventListener('click', () => cibler(r.dataset.id));
+  r.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); cibler(r.dataset.id); }});
+});
+vises.forEach(v => v.addEventListener('click', () => {
+  const r = remarques.find(x => x.dataset.id === v.dataset.id);
+  if (r){ r.scrollIntoView({block:'center'}); r.focus(); cibler(v.dataset.id); }
+}));
+
+const dlg = document.getElementById('confirm');
+document.getElementById('btn-valider').addEventListener('click', () => dlg.showModal());
+document.getElementById('annuler').addEventListener('click', () => dlg.close());
+document.getElementById('confirmer').addEventListener('click', () => dlg.close());
+</script>
+</body>
+</html>

@@ -1,0 +1,1271 @@
+openapi: 3.1.0
+info:
+  title: Science AI Writer IDE — API locale
+  version: 0.3.1
+  description: |
+    Contrat de l'API v1 du Science AI Writer IDE.
+
+    Ce fichier est normatif : il est subordonné aux ADR et aux spécifications
+    techniques V0.3, et prioritaire sur toute implémentation existante.
+    Une divergence entre le code et ce contrat est un défaut du code.
+
+    Principes :
+    - API strictement locale, liée à 127.0.0.1. Aucune exposition réseau.
+    - Les opérations longues (ingestion, génération, export) répondent 202 et
+      retournent une tâche ; la progression est suivie par SSE.
+    - Les portes de validation humaine sont des endpoints explicites. Aucune
+      transition d'état ne les franchit automatiquement.
+    - Toute sortie réseau exige un consentement de périmètre préalable.
+  license:
+    name: Propriétaire
+
+servers:
+  - url: http://127.0.0.1:8000/api/v1
+    description: Instance locale
+
+tags:
+  - name: system
+  - name: projects
+  - name: sources
+  - name: biblio
+  - name: plan
+  - name: sections
+  - name: code
+  - name: export
+  - name: plagiarism
+  - name: consent
+  - name: audit
+  - name: tasks
+
+paths:
+
+  /health:
+    get:
+      tags: [system]
+      summary: État du service et de ses dépendances
+      responses:
+        '200':
+          description: Service opérationnel
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+
+  /system/capabilities:
+    get:
+      tags: [system]
+      summary: Capacités détectées de l'environnement
+      description: |
+        Renseigne le frontend sur ce qui est réellement disponible : GPU,
+        VRAM totale, Ollama, Quarto, runtime Wasm, sandbox native. Permet de
+        désactiver une fonctionnalité dans l'interface plutôt que de la
+        laisser échouer à l'usage.
+      responses:
+        '200':
+          description: Capacités
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Capabilities' }
+
+  /projects:
+    get:
+      tags: [projects]
+      summary: Lister les projets
+      responses:
+        '200':
+          description: Liste
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Project' }
+    post:
+      tags: [projects]
+      summary: Créer un projet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectCreate' }
+      responses:
+        '201':
+          description: Projet créé
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /projects/{projectId}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [projects]
+      summary: Détail d'un projet
+      responses:
+        '200':
+          description: Projet
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [projects]
+      summary: Modifier un projet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectUpdate' }
+      responses:
+        '200':
+          description: Projet modifié
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [projects]
+      summary: Supprimer un projet
+      responses:
+        '204': { description: Supprimé }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{projectId}/backup:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [projects]
+      summary: Sauvegarder le projet dans un fichier unique
+      description: |
+        Exécute PRAGMA wal_checkpoint(TRUNCATE) puis copie le fichier
+        .sqlite. Conformément à ADR-001, la copie contient l'intégralité des
+        données relationnelles et vectorielles.
+      responses:
+        '200':
+          description: Sauvegarde produite
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [path, size_bytes, created_at]
+                properties:
+                  path: { type: string }
+                  size_bytes: { type: integer }
+                  created_at: { type: string, format: date-time }
+
+  /projects/{projectId}/sources:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [sources]
+      summary: Lister les sources du projet
+      parameters:
+        - name: approved
+          in: query
+          schema: { type: boolean }
+        - name: is_preprint
+          in: query
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: Liste
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SourceDocument' }
+    post:
+      tags: [sources]
+      summary: Importer un document
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                title: { type: string }
+                doi: { type: string }
+      responses:
+        '201':
+          description: Source importée, non encore ingérée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SourceDocument' }
+
+  /projects/{projectId}/sources/{sourceId}/approve:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/SourceId'
+    post:
+      tags: [sources]
+      summary: Approuver une source
+      description: |
+        Porte de validation humaine. Seules les sources approuvées sont
+        utilisables par l'agent rédacteur.
+      responses:
+        '200':
+          description: Source approuvée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SourceDocument' }
+
+  /projects/{projectId}/sources/{sourceId}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/SourceId'
+    delete:
+      tags: [sources]
+      summary: Supprimer une source
+      description: |
+        Refusée si la source est encore citée dans une section
+        (citation.source_id est en ON DELETE RESTRICT).
+      responses:
+        '204': { description: Supprimée }
+        '409':
+          description: Source encore citée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConflictDetail' }
+
+  /projects/{projectId}/ingest:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [sources]
+      summary: Lancer l'ingestion RAG des sources approuvées
+      description: |
+        Découpage, embeddings CPU (ADR-013) et indexation dans vec_chunk.
+        Opération longue : suivre la tâche retournée.
+      responses:
+        '202':
+          description: Tâche créée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Task' }
+        '409':
+          description: Aucune source approuvée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConflictDetail' }
+
+  /projects/{projectId}/search:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [sources]
+      summary: Recherche sémantique dans la base de connaissances
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query: { type: string }
+                k: { type: integer, default: 5, minimum: 1, maximum: 50 }
+                year_min: { type: integer }
+                exclude_preprints: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Résultats avec provenance
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ChunkHit' }
+
+  /projects/{projectId}/biblio/search:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [biblio]
+      summary: Recherche bibliographique multi-bases
+      description: |
+        Exige le consentement biblio_search. Seules les requêtes sortent :
+        aucun texte du mémoire n'est transmis.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query: { type: string }
+                providers:
+                  type: array
+                  items:
+                    type: string
+                    enum: [openalex, crossref, pubmed, semanticscholar, arxiv]
+                year_min: { type: integer }
+                limit: { type: integer, default: 20, maximum: 100 }
+      responses:
+        '200':
+          description: Candidats dédupliqués
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SourceCandidate' }
+        '403': { $ref: '#/components/responses/ConsentRequired' }
+
+  /projects/{projectId}/plan/generate:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [plan]
+      summary: Générer un plan
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                problematique:
+                  type: string
+                  description: |
+                    Si fournie, elle est reprise telle quelle, sans
+                    reformulation par l'agent.
+                target_words: { type: integer, minimum: 5000 }
+      responses:
+        '202':
+          description: Tâche de génération créée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Task' }
+
+  /projects/{projectId}/plan:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [plan]
+      summary: Plan courant
+      responses:
+        '200':
+          description: Plan
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Plan' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{projectId}/plan/nodes:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [plan]
+      summary: Ajouter un nœud
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PlanNodeCreate' }
+      responses:
+        '201':
+          description: Nœud créé
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlanNode' }
+
+  /projects/{projectId}/plan/nodes/{nodeId}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/NodeId'
+    put:
+      tags: [plan]
+      summary: Modifier un nœud
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PlanNodeUpdate' }
+      responses:
+        '200':
+          description: Nœud modifié
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlanNode' }
+    delete:
+      tags: [plan]
+      summary: Supprimer un sous-arbre
+      parameters:
+        - name: force
+          in: query
+          schema: { type: boolean, default: false }
+          description: |
+            Sans force, la suppression est refusée si des sections rédigées
+            sont rattachées. Avec force, ces sections passent en ORPHANED —
+            elles ne sont jamais supprimées.
+      responses:
+        '204': { description: Supprimé }
+        '409':
+          description: Sections rédigées rattachées
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConflictDetail' }
+
+  /projects/{projectId}/plan/reorder:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [plan]
+      summary: Réordonner des nœuds par lot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [moves]
+              properties:
+                moves:
+                  type: array
+                  items:
+                    type: object
+                    required: [node_id, parent_id, ordinal]
+                    properties:
+                      node_id: { type: integer }
+                      parent_id: { type: integer, nullable: true }
+                      ordinal: { type: integer }
+      responses:
+        '200':
+          description: Plan réordonné
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Plan' }
+
+  /projects/{projectId}/plan/validate:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [plan]
+      summary: Valider le plan — porte humaine
+      description: |
+        Transition PLAN_REVIEW vers PLAN_VALIDATED. Aucune autre voie ne
+        franchit cette porte (ADR-004).
+      responses:
+        '200':
+          description: Plan validé
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Plan' }
+        '409':
+          description: État incompatible
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConflictDetail' }
+
+  /projects/{projectId}/plan/versions:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [plan]
+      summary: Historique des versions du plan
+      responses:
+        '200':
+          description: Versions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    version: { type: integer }
+                    status: { $ref: '#/components/schemas/PlanStatus' }
+                    created_at: { type: string, format: date-time }
+
+  /projects/{projectId}/sections/{nodeId}/draft:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/NodeId'
+    post:
+      tags: [sections]
+      summary: Rédiger une section
+      description: |
+        Refusé tant que le plan n'est pas validé : retourne 409 avec l'état
+        courant et l'état requis.
+      responses:
+        '202':
+          description: Tâche de rédaction créée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Task' }
+        '409':
+          description: Plan non validé
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConflictDetail' }
+
+  /projects/{projectId}/sections/{sectionId}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/SectionId'
+    get:
+      tags: [sections]
+      summary: Contenu d'une section
+      responses:
+        '200':
+          description: Section
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DraftSection' }
+    put:
+      tags: [sections]
+      summary: Remplacer le contenu d'une section
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content_qmd]
+              properties:
+                content_qmd:
+                  type: string
+                  description: Quarto Markdown. La syntaxe MyST est rejetée (ADR-006).
+      responses:
+        '200':
+          description: Section modifiée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DraftSection' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /projects/{projectId}/sections/{sectionId}/review:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/SectionId'
+    post:
+      tags: [sections]
+      summary: Soumettre une section à relecture
+      responses:
+        '202':
+          description: Tâche de relecture créée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Task' }
+
+  /projects/{projectId}/sections/{sectionId}/validate:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/SectionId'
+    post:
+      tags: [sections]
+      summary: Valider une section — porte humaine
+      responses:
+        '200':
+          description: Section validée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DraftSection' }
+
+  /projects/{projectId}/code/execute:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [code]
+      summary: Exécuter un script Python en environnement isolé
+      description: |
+        Le niveau d'isolation est décidé par le serveur (ADR-005) :
+        toute exécution d'origine agent est ramenée au niveau Wasm, quel que
+        soit le mode demandé. Le niveau natif exige le consentement
+        native_execution.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, origin]
+              properties:
+                code: { type: string }
+                origin: { type: string, enum: [agent, user] }
+                mode: { type: string, enum: [wasm, native], default: wasm }
+                limits: { $ref: '#/components/schemas/ResourceLimits' }
+                datasets:
+                  type: array
+                  items: { type: string }
+      responses:
+        '200':
+          description: Résultat d'exécution
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExecutionResult' }
+        '403': { $ref: '#/components/responses/ConsentRequired' }
+
+  /projects/{projectId}/code/executions:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [code]
+      summary: Historique des exécutions
+      responses:
+        '200':
+          description: Historique
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ExecutionResult' }
+
+  /projects/{projectId}/export:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [export]
+      summary: Exporter le document
+      description: |
+        Regénère le fichier .bib à partir des seules citations vérifiées des
+        sections incluses (ADR-007), puis compile via Quarto. Une citation
+        invalide bloque l'export.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [formats]
+              properties:
+                formats:
+                  type: array
+                  items: { type: string, enum: [pdf, docx, html] }
+                include_ai_declaration: { type: boolean, default: true }
+                template: { type: string }
+      responses:
+        '202':
+          description: Tâche d'export créée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Task' }
+        '409':
+          description: Citation non vérifiée ou source absente
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConflictDetail' }
+
+  /projects/{projectId}/plagiarism/local:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [plagiarism]
+      summary: Vérification de similarité locale, hors ligne
+      description: |
+        Compare le texte aux chunks ingérés du projet et aux autres sections.
+        Aucune sortie réseau, aucun consentement requis.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                section_id: { type: integer }
+                threshold: { type: number, default: 0.35, minimum: 0, maximum: 1 }
+      responses:
+        '200':
+          description: Passages signalés
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PlagiarismMatch' }
+
+  /projects/{projectId}/plagiarism/remote/preview:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [plagiarism]
+      summary: Prévisualiser le texte qui serait transmis
+      description: |
+        Retourne le texte exact et son volume pour l'étendue demandée, sans
+        rien transmettre. L'interface affiche ce contenu avant de demander
+        confirmation ; aucun envoi n'a lieu sans cette étape.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scope]
+              properties:
+                scope: { $ref: '#/components/schemas/PlagiarismScope' }
+                section_id: { type: integer, nullable: true }
+      responses:
+        '200':
+          description: Aperçu de la transmission
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlagiarismPreview' }
+
+  /projects/{projectId}/plagiarism/remote:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [plagiarism]
+      summary: Vérification de similarité auprès du service configuré
+      description: |
+        Exige le consentement plagiarism_check. L'étendue est choisie par
+        l'utilisateur à chaque requête et n'est jamais mémorisée. La
+        vérification s'exécute quel que soit le résultat du contrôle local.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scope, preview_digest]
+              properties:
+                scope: { $ref: '#/components/schemas/PlagiarismScope' }
+                section_id: { type: integer, nullable: true }
+                preview_digest:
+                  type: string
+                  description: |
+                    SHA-256 du texte retourné par /remote/preview. Garantit
+                    que l'utilisateur a confirmé sur le texte réellement
+                    transmis. Un digest absent ou divergent est refusé.
+      responses:
+        '202':
+          description: Tâche de vérification créée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Task' }
+        '403': { $ref: '#/components/responses/ConsentRequired' }
+        '409':
+          description: Aperçu non confirmé ou divergent
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConflictDetail' }
+
+  /projects/{projectId}/consents:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [consent]
+      summary: Consentements du projet
+      responses:
+        '200':
+          description: Liste
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Consent' }
+    post:
+      tags: [consent]
+      summary: Accorder ou révoquer un consentement
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scope, granted]
+              properties:
+                scope: { $ref: '#/components/schemas/ConsentScope' }
+                granted: { type: boolean }
+      responses:
+        '200':
+          description: Consentement enregistré
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Consent' }
+
+  /projects/{projectId}/audit:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [audit]
+      summary: Journal d'audit
+      parameters:
+        - name: event_type
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 100, maximum: 1000 }
+      responses:
+        '200':
+          description: Entrées
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AuditEntry' }
+
+  /projects/{projectId}/audit/verify:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [audit]
+      summary: Vérifier la chaîne de hachage
+      description: |
+        Détection d'altération, non immuabilité (ADR-009). Retourne l'index
+        de la première entrée incohérente le cas échéant.
+      responses:
+        '200':
+          description: Résultat de vérification
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, entries_checked]
+                properties:
+                  status: { type: string, enum: [VALIDE, ALTERE] }
+                  entries_checked: { type: integer }
+                  first_invalid_index: { type: integer, nullable: true }
+
+  /tasks/{taskId}:
+    parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      tags: [tasks]
+      summary: État d'une tâche
+      responses:
+        '200':
+          description: Tâche
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Task' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /tasks/{taskId}/stream:
+    parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      tags: [tasks]
+      summary: Flux d'événements d'une tâche
+      description: |
+        Server-Sent Events. Types d'événements : `state` (transition du
+        graphe), `token` (génération en flux), `progress` (ingestion),
+        `guardrail` (déclenchement), `error`, `done`.
+      responses:
+        '200':
+          description: Flux SSE
+          content:
+            text/event-stream:
+              schema: { type: string }
+
+components:
+
+  parameters:
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema: { type: integer }
+    SourceId:
+      name: sourceId
+      in: path
+      required: true
+      schema: { type: integer }
+    NodeId:
+      name: nodeId
+      in: path
+      required: true
+      schema: { type: integer }
+    SectionId:
+      name: sectionId
+      in: path
+      required: true
+      schema: { type: integer }
+
+  responses:
+    NotFound:
+      description: Ressource introuvable
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationError:
+      description: Corps de requête invalide
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ConsentRequired:
+      description: Consentement de périmètre absent
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ConsentRequiredDetail' }
+
+  schemas:
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details: { type: object, additionalProperties: true }
+
+    ConflictDetail:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        current_state: { type: string }
+        required_state: { type: string }
+        blocking_items:
+          type: array
+          items: { type: object, additionalProperties: true }
+
+    ConsentRequiredDetail:
+      type: object
+      required: [code, scope, message]
+      properties:
+        code: { type: string, const: CONSENT_REQUIRED }
+        scope: { $ref: '#/components/schemas/ConsentScope' }
+        message: { type: string }
+        will_transmit:
+          type: string
+          description: Description de ce qui sortirait si le consentement était accordé.
+
+    Health:
+      type: object
+      required: [status, version]
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        version: { type: string }
+        database: { type: string, enum: [ok, error] }
+        llm: { type: string, enum: [ok, unavailable] }
+
+    Capabilities:
+      type: object
+      properties:
+        platform: { type: string, enum: [windows, linux, darwin] }
+        gpu_available: { type: boolean }
+        vram_total_mb: { type: integer, nullable: true }
+        ollama_available: { type: boolean }
+        llm_model_loaded: { type: string, nullable: true }
+        code_model_available: { type: boolean }
+        quarto_version: { type: string, nullable: true }
+        wasm_sandbox_available: { type: boolean }
+        native_sandbox_available: { type: boolean }
+        native_network_isolation_guaranteed:
+          type: boolean
+          description: Faux sous Windows (ADR-005).
+        sqlite_vec_version: { type: string, nullable: true }
+
+    Project:
+      type: object
+      required: [id, name, subject, language, academic_level, created_at]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        subject: { type: string }
+        discipline: { type: string }
+        language: { type: string, examples: [fr, en] }
+        academic_level:
+          type: string
+          enum: [master, ingenieur, doctorat, hdr]
+        target_words: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ProjectCreate:
+      type: object
+      required: [name, subject, language, academic_level]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        subject: { type: string, minLength: 10 }
+        discipline: { type: string }
+        language: { type: string, default: fr }
+        academic_level:
+          type: string
+          enum: [master, ingenieur, doctorat, hdr]
+        target_words: { type: integer, minimum: 5000, default: 60000 }
+
+    ProjectUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        subject: { type: string }
+        discipline: { type: string }
+        target_words: { type: integer }
+
+    SourceDocument:
+      type: object
+      required: [id, kind, title, is_preprint, imported_at]
+      properties:
+        id: { type: integer }
+        kind:
+          type: string
+          enum: [article, book, thesis, report, standard, preprint, other]
+        title: { type: string }
+        authors: { type: string }
+        year: { type: integer, nullable: true }
+        doi: { type: string, nullable: true }
+        url: { type: string, nullable: true }
+        venue: { type: string, nullable: true }
+        is_preprint:
+          type: boolean
+          description: Propagé jusque dans la bibliographie exportée, sans exception.
+        bibtex_key: { type: string, nullable: true }
+        file_path: { type: string, nullable: true }
+        sha256: { type: string, nullable: true }
+        chunk_count: { type: integer }
+        imported_at: { type: string, format: date-time }
+        approved_at: { type: string, format: date-time, nullable: true }
+
+    SourceCandidate:
+      type: object
+      required: [title, provider, is_preprint]
+      properties:
+        title: { type: string }
+        authors: { type: string }
+        year: { type: integer, nullable: true }
+        doi: { type: string, nullable: true }
+        url: { type: string, nullable: true }
+        venue: { type: string, nullable: true }
+        abstract: { type: string, nullable: true }
+        is_preprint: { type: boolean }
+        provider:
+          type: string
+          enum: [openalex, crossref, pubmed, semanticscholar, arxiv]
+        merged_from:
+          type: array
+          items: { type: string }
+
+    ChunkHit:
+      type: object
+      required: [chunk_id, source_id, text, distance]
+      properties:
+        chunk_id: { type: integer }
+        source_id: { type: integer }
+        text: { type: string }
+        page_start: { type: integer, nullable: true }
+        page_end: { type: integer, nullable: true }
+        distance: { type: number }
+        source_title: { type: string }
+        source_year: { type: integer, nullable: true }
+        source_doi: { type: string, nullable: true }
+        is_preprint: { type: boolean }
+
+    PlanStatus:
+      type: string
+      enum: [DRAFT, REVIEW, VALIDATED]
+
+    Plan:
+      type: object
+      required: [id, version, status, problematique, nodes]
+      properties:
+        id: { type: integer }
+        version: { type: integer }
+        status: { $ref: '#/components/schemas/PlanStatus' }
+        problematique: { type: string }
+        research_questions:
+          type: array
+          items: { type: string }
+        methodology_note: { type: string }
+        nodes:
+          type: array
+          items: { $ref: '#/components/schemas/PlanNode' }
+        validated_at: { type: string, format: date-time, nullable: true }
+
+    PlanNode:
+      type: object
+      required: [id, title, objective, target_words, level, ordinal]
+      properties:
+        id: { type: integer }
+        parent_id: { type: integer, nullable: true }
+        title: { type: string, minLength: 3, maxLength: 200 }
+        objective: { type: string }
+        target_words: { type: integer, minimum: 150, maximum: 20000 }
+        level: { type: integer, minimum: 1, maximum: 5 }
+        ordinal: { type: integer }
+        section_status:
+          type: string
+          nullable: true
+          enum: [NONE, DRAFTING, REVIEWING, VALIDATED, ORPHANED]
+        children:
+          type: array
+          items: { $ref: '#/components/schemas/PlanNode' }
+
+    PlanNodeCreate:
+      type: object
+      required: [title, objective, target_words, parent_id, ordinal]
+      properties:
+        title: { type: string }
+        objective: { type: string }
+        target_words: { type: integer }
+        parent_id: { type: integer, nullable: true }
+        ordinal: { type: integer }
+
+    PlanNodeUpdate:
+      type: object
+      properties:
+        title: { type: string }
+        objective: { type: string }
+        target_words: { type: integer }
+
+    DraftSection:
+      type: object
+      required: [id, plan_node_id, content_qmd, status, version]
+      properties:
+        id: { type: integer }
+        plan_node_id: { type: integer }
+        content_qmd:
+          type: string
+          description: Quarto Markdown, format canonique unique (ADR-006).
+        status:
+          type: string
+          enum: [DRAFTING, GUARDRAIL, REVIEWING, CORRECTING, VALIDATED, ORPHANED]
+        quality_score: { type: number, nullable: true, minimum: 0, maximum: 100 }
+        version: { type: integer }
+        citations:
+          type: array
+          items: { $ref: '#/components/schemas/Citation' }
+        generated_at: { type: string, format: date-time, nullable: true }
+        validated_at: { type: string, format: date-time, nullable: true }
+
+    Citation:
+      type: object
+      required: [id, source_id, bibtex_key, verified]
+      properties:
+        id: { type: integer }
+        source_id: { type: integer }
+        chunk_id: { type: integer, nullable: true }
+        bibtex_key: { type: string }
+        locator: { type: string, nullable: true }
+        verified:
+          type: boolean
+          description: Une citation non vérifiée bloque l'export (ADR-007).
+
+    ResourceLimits:
+      type: object
+      properties:
+        memory_mb: { type: integer, default: 2048 }
+        cpu_seconds: { type: integer, default: 60 }
+        wall_seconds: { type: integer, default: 120 }
+        max_file_mb: { type: integer, default: 512 }
+        max_processes: { type: integer, default: 8 }
+
+    ExecutionResult:
+      type: object
+      required: [exit_code, stdout, stderr, duration_ms, level, network_isolation_guaranteed]
+      properties:
+        id: { type: integer }
+        exit_code: { type: integer }
+        stdout: { type: string }
+        stderr: { type: string }
+        duration_ms: { type: integer }
+        level: { type: integer, enum: [1, 2] }
+        timed_out: { type: boolean }
+        limit_exceeded:
+          type: string
+          nullable: true
+          enum: [memory, cpu, wall, null]
+        network_isolation_guaranteed:
+          type: boolean
+          description: |
+            Faux au niveau 2 sous Windows. Ce champ est honnête par
+            construction et affiché à l'utilisateur (ADR-005).
+        downgraded_from_requested_mode: { type: boolean }
+        artifacts:
+          type: array
+          items: { type: string }
+
+    PlagiarismScope:
+      type: string
+      description: |
+        Étendue du texte transmis, choisie par l'utilisateur à chaque
+        requête. Jamais mémorisée comme préférence.
+      enum: [passages, section, document]
+
+    PlagiarismPreview:
+      type: object
+      required: [scope, text, word_count, digest]
+      properties:
+        scope: { $ref: '#/components/schemas/PlagiarismScope' }
+        text:
+          type: string
+          description: Texte exact qui serait transmis, affiché avant confirmation.
+        word_count: { type: integer }
+        section_count: { type: integer }
+        digest:
+          type: string
+          description: SHA-256 du texte, à renvoyer comme preview_digest.
+
+    PlagiarismMatch:
+      type: object
+      required: [excerpt, score, origin]
+      properties:
+        excerpt: { type: string }
+        section_id: { type: integer, nullable: true }
+        score: { type: number, minimum: 0, maximum: 1 }
+        origin: { type: string, enum: [local_corpus, local_self, remote] }
+        matched_source_id: { type: integer, nullable: true }
+        matched_reference: { type: string, nullable: true }
+        matched_url: { type: string, nullable: true }
+
+    ConsentScope:
+      type: string
+      enum:
+        - biblio_search
+        - model_download
+        - plagiarism_check
+        - remote_llm
+        - native_execution
+
+    Consent:
+      type: object
+      required: [scope, granted]
+      properties:
+        scope: { $ref: '#/components/schemas/ConsentScope' }
+        granted: { type: boolean }
+        granted_at: { type: string, format: date-time, nullable: true }
+        details: { type: string, nullable: true }
+
+    AuditEntry:
+      type: object
+      required: [id, event_type, hash, created_at]
+      properties:
+        id: { type: integer }
+        event_type: { type: string }
+        payload: { type: object, additionalProperties: true }
+        prev_hash: { type: string, nullable: true }
+        hash: { type: string }
+        created_at: { type: string, format: date-time }
+
+    TaskState:
+      type: string
+      enum:
+        - PROJECT_CREATED
+        - SOURCES_INGESTING
+        - SOURCES_READY
+        - PLAN_DRAFTING
+        - PLAN_GUARDRAIL
+        - PLAN_REVIEW
+        - PLAN_VALIDATED
+        - SECTION_DRAFTING
+        - SECTION_GUARDRAIL
+        - SECTION_REVIEWING
+        - SECTION_CORRECTING
+        - SECTION_VALIDATED
+        - DOCUMENT_READY
+        - EXPORTING
+        - EXPORTED
+        - ERROR_STATE
+
+    Task:
+      type: object
+      required: [id, project_id, state, created_at]
+      properties:
+        id: { type: integer }
+        project_id: { type: integer }
+        state: { $ref: '#/components/schemas/TaskState' }
+        agent: { type: string, nullable: true }
+        progress: { type: number, minimum: 0, maximum: 1 }
+        retry_count: { type: integer }
+        review_loop_count: { type: integer }
+        last_error: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }

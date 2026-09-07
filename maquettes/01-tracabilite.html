@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maquette 1 — Boucle de traçabilité</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=Spectral:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --papier:#FBFAF7; --encre:#1B2430; --filet:#D8D6CF; --gris:#6B7280;
+  --source:#2F6B54; --crayon:#3A5FA8; --epreuve:#A6402E; --graphite:#4A4A4A;
+  --panneau:#F4F2ED;
+  --serif:"Spectral",Georgia,serif; --sans:"Archivo",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  background:var(--papier); color:var(--encre); font-family:var(--sans);
+  font-size:15px; line-height:1.5;
+}
+.app{display:grid; grid-template-rows:auto 1fr; height:100%}
+
+/* ---- barre supérieure ---- */
+.bandeau{
+  display:flex; align-items:baseline; gap:1.5rem; flex-wrap:wrap;
+  padding:.85rem 1.5rem; border-bottom:1px solid var(--filet);
+}
+.fil{font-size:.85rem; color:var(--gris)}
+.fil b{font-weight:500; color:var(--encre)}
+.etat{
+  margin-left:auto; font-size:.8rem; color:var(--gris);
+  border:1px solid var(--filet); border-radius:2px; padding:.2rem .55rem;
+}
+
+/* ---- disposition ---- */
+.plan{display:grid; grid-template-columns:minmax(0,1fr) 25rem; min-height:0}
+@media (max-width:60rem){.plan{grid-template-columns:1fr}}
+
+/* ---- manuscrit ---- */
+.manuscrit{overflow-y:auto; padding:2.5rem 2rem 6rem}
+.manuscrit-corps{max-width:38rem; margin:0 auto}
+.manuscrit h1{
+  font-family:var(--serif); font-weight:500; font-size:1.5rem;
+  margin:0 0 .25rem; line-height:1.25;
+}
+.manuscrit .situe{font-size:.8rem; color:var(--gris); margin-bottom:2rem}
+.manuscrit p{
+  font-family:var(--serif); font-size:1.0625rem; line-height:1.75;
+  margin:0 0 1.35rem; text-align:justify; hyphens:auto;
+}
+
+/* ---- marques de correcteur ---- */
+.claim{
+  cursor:pointer; background:none; border:0; padding:0; margin:0;
+  font:inherit; color:inherit; text-align:inherit;
+  text-decoration-thickness:1.5px; text-underline-offset:.22em;
+}
+.claim[data-kind="source"]{text-decoration:underline solid var(--source)}
+.claim[data-kind="synthese"]{text-decoration:underline dotted var(--graphite)}
+.claim[data-kind="hypothese"]{text-decoration:underline wavy var(--crayon); text-underline-offset:.28em}
+.claim[data-kind="limite"]{text-decoration:underline dashed var(--epreuve)}
+.claim:hover{background:#EDEAE2}
+.claim:focus-visible{outline:2px solid var(--crayon); outline-offset:2px; border-radius:2px}
+.claim[aria-current="true"]{background:#E6E2D6; box-shadow:inset 0 -2px 0 rgba(0,0,0,.06)}
+.claim .repere{
+  font-family:var(--sans); font-size:.62rem; font-weight:600;
+  vertical-align:.5em; margin-left:.12em; letter-spacing:.02em;
+}
+[data-kind="source"] .repere{color:var(--source)}
+[data-kind="synthese"] .repere{color:var(--graphite)}
+[data-kind="hypothese"] .repere{color:var(--crayon)}
+[data-kind="limite"] .repere{color:var(--epreuve)}
+
+/* estompage quand un filtre est actif */
+.manuscrit.filtre .claim[data-kind="source"]{opacity:.35}
+.manuscrit.filtre p{color:#9AA0A6}
+.manuscrit.filtre .claim:not([data-kind="source"]){color:var(--encre); opacity:1}
+
+/* ---- apparat ---- */
+.apparat{
+  border-left:1px solid var(--filet); background:var(--panneau);
+  overflow-y:auto; padding:1.5rem 1.35rem 4rem;
+}
+@media (max-width:60rem){.apparat{border-left:0; border-top:1px solid var(--filet)}}
+.apparat h2{
+  font-size:.8rem; font-weight:600; margin:0 0 .2rem; letter-spacing:.01em;
+}
+.apparat .sous{font-size:.78rem; color:var(--gris); margin:0 0 1.4rem}
+
+.vide{font-size:.85rem; color:var(--gris); line-height:1.65}
+.vide p{margin:0 0 .9rem}
+
+.fiche{display:none}
+.fiche.on{display:block}
+.fiche .genre{
+  display:inline-block; font-size:.7rem; font-weight:600;
+  padding:.15rem .5rem; border:1px solid; border-radius:2px; margin-bottom:.9rem;
+}
+.genre.source{color:var(--source); border-color:var(--source)}
+.genre.synthese{color:var(--graphite); border-color:var(--graphite)}
+.genre.hypothese{color:var(--crayon); border-color:var(--crayon)}
+.genre.limite{color:var(--epreuve); border-color:var(--epreuve)}
+
+.affirmation{
+  font-family:var(--serif); font-size:.95rem; line-height:1.6;
+  border-left:2px solid var(--filet); padding-left:.85rem; margin:0 0 1.4rem;
+}
+.explique{font-size:.85rem; line-height:1.65; color:var(--gris); margin:0 0 1.4rem}
+
+.ref{border-top:1px solid var(--filet); padding-top:1rem; margin-top:0}
+.ref dt{font-size:.7rem; color:var(--gris); margin-bottom:.15rem}
+.ref dd{margin:0 0 .8rem; font-size:.85rem}
+.ref .titre{font-family:var(--serif); font-size:.95rem; line-height:1.45}
+.prepub{
+  display:inline-block; font-size:.68rem; font-weight:600; color:var(--epreuve);
+  border:1px solid var(--epreuve); border-radius:2px; padding:.05rem .35rem; margin-left:.3rem;
+}
+
+.extrait{
+  font-family:var(--serif); font-size:.88rem; line-height:1.6;
+  background:var(--papier); border:1px solid var(--filet);
+  padding:.85rem .9rem; margin:.2rem 0 .6rem;
+}
+.extrait mark{background:#E4EDE8; box-shadow:inset 0 -1px 0 var(--source)}
+.loc{font-size:.75rem; color:var(--gris); margin-bottom:1.2rem}
+
+.actions{display:flex; gap:.5rem; flex-wrap:wrap; margin-top:.2rem}
+button.act{
+  font-family:var(--sans); font-size:.8rem; cursor:pointer;
+  background:var(--papier); color:var(--encre);
+  border:1px solid var(--encre); border-radius:2px; padding:.42rem .7rem;
+}
+button.act:hover{background:var(--encre); color:var(--papier)}
+button.act.discret{border-color:var(--filet); color:var(--gris)}
+button.act.discret:hover{background:var(--filet); color:var(--encre)}
+button:focus-visible{outline:2px solid var(--crayon); outline-offset:2px}
+
+/* ---- pied : légende et filtre ---- */
+.pied{
+  position:sticky; bottom:0; grid-column:1/-1;
+  display:flex; align-items:center; gap:1.25rem; flex-wrap:wrap;
+  padding:.6rem 1.5rem; background:var(--papier);
+  border-top:1px solid var(--filet); font-size:.78rem;
+}
+.legende{display:flex; gap:1rem; flex-wrap:wrap; color:var(--gris)}
+.legende span{display:inline-flex; align-items:center; gap:.35rem}
+.trait{width:1.5rem; height:0; border-bottom-width:1.5px}
+.t-source{border-bottom:1.5px solid var(--source)}
+.t-synthese{border-bottom:1.5px dotted var(--graphite)}
+.t-hypothese{border-bottom:1.5px solid var(--crayon)}
+.t-limite{border-bottom:1.5px dashed var(--epreuve)}
+.compte{margin-left:auto; color:var(--gris)}
+label.bascule{display:inline-flex; align-items:center; gap:.4rem; cursor:pointer}
+
+@media (prefers-reduced-motion:no-preference){
+  .fiche.on{animation:entre .16s ease-out}
+  @keyframes entre{from{opacity:0; transform:translateY(3px)}to{opacity:1}}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="bandeau">
+    <div class="fil">Microplastiques et fonction rénale &rsaquo; 2. État de l'art &rsaquo; <b>2.3 Mécanismes d'accumulation tissulaire</b></div>
+    <div class="etat">Rédigée · en attente de relecture</div>
+  </header>
+
+  <div class="plan">
+
+    <main class="manuscrit" id="manuscrit">
+      <div class="manuscrit-corps">
+        <h1>2.3 Mécanismes d'accumulation tissulaire</h1>
+        <p class="situe">1 240 mots sur 1 500 visés · 6 sources citées · version 3</p>
+
+        <p>Les travaux conduits sur les cétacés échoués le long des côtes atlantiques
+        ont établi la présence de particules de polyéthylène dans le parenchyme rénal
+        de treize individus sur dix-sept, à des concentrations comprises entre 0,8 et
+        4,2 particules par gramme de tissu.<button class="claim" data-kind="source" data-id="c1"><span class="repere">1</span></button>
+        Cette distribution suggère un franchissement de la barrière glomérulaire par
+        les fractions les plus fines, mécanisme dont la cinétique reste mal
+        caractérisée.<button class="claim" data-kind="synthese" data-id="c2"><span class="repere">2</span></button></p>
+
+        <p>Les études menées sur modèle murin rapportent une rétention préférentielle
+        des particules inférieures à 5 µm au niveau du cortex, tandis que les fractions
+        supérieures demeurent confinées au compartiment vasculaire.<button class="claim" data-kind="source" data-id="c3"><span class="repere">3</span></button>
+        Il est permis de supposer que ce seuil dimensionnel s'applique également aux
+        mammifères marins, dont l'architecture néphronique présente des similarités
+        structurelles, mais aucune donnée expérimentale directe ne vient à ce jour
+        étayer cette extrapolation.<button class="claim" data-kind="hypothese" data-id="c4"><span class="repere">4</span></button></p>
+
+        <p>L'interprétation de ces résultats se heurte à une limite méthodologique
+        que la littérature disponible ne lève pas : les protocoles de digestion
+        tissulaire employés diffèrent d'une équipe à l'autre, et leur rendement
+        d'extraction n'a fait l'objet d'aucune inter-comparaison
+        publiée.<button class="claim" data-kind="limite" data-id="c5"><span class="repere">5</span></button>
+        Les concentrations rapportées ne sont donc pas strictement comparables entre
+        études.<button class="claim" data-kind="synthese" data-id="c6"><span class="repere">6</span></button></p>
+
+        <p>Enfin, une prépublication récente signale une corrélation entre charge
+        particulaire rénale et marqueurs d'inflammation interstitielle chez le phoque
+        gris.<button class="claim" data-kind="source" data-id="c7"><span class="repere">7</span></button>
+        Ce résultat, s'il était confirmé par une évaluation par les pairs,
+        orienterait la question de recherche vers les conséquences fonctionnelles
+        plutôt que vers la seule quantification de l'exposition.</p>
+      </div>
+    </main>
+
+    <aside class="apparat" id="apparat" aria-live="polite">
+      <h2>Apparat</h2>
+      <p class="sous">D'où vient cette phrase</p>
+
+      <div class="vide" id="vide">
+        <p>Sélectionnez une affirmation soulignée dans le texte pour en voir
+        l'origine : la source, l'extrait exact retenu et sa page.</p>
+        <p>Les affirmations non sourcées — synthèses, hypothèses, limites — n'ont pas
+        d'origine bibliographique. C'est normal, et c'est explicitement déclaré.</p>
+      </div>
+
+      <!-- c1 -->
+      <div class="fiche" id="f-c1">
+        <span class="genre source">Affirmation sourcée</span>
+        <p class="affirmation">Présence de particules de polyéthylène dans le parenchyme rénal de treize individus sur dix-sept, entre 0,8 et 4,2 particules par gramme.</p>
+        <dl class="ref">
+          <dt>Source</dt>
+          <dd class="titre">Occurrence of microplastic particles in renal tissue of stranded cetaceans along the North Atlantic coast</dd>
+          <dt>Auteurs et revue</dt>
+          <dd>Lindqvist, M. ; Oyarzún, P. ; Rehn, K. — <i>Marine Pollution Bulletin</i>, 2023</dd>
+          <dt>Identifiant</dt>
+          <dd>10.1016/j.marpolbul.2023.114872</dd>
+        </dl>
+        <dt style="font-size:.7rem;color:var(--gris)">Extrait retenu</dt>
+        <div class="extrait">« Polyethylene particles were detected in the renal parenchyma of <mark>13 of 17 individuals</mark>, at concentrations ranging from <mark>0.8 to 4.2 particles per gram</mark> of wet tissue, with no significant difference between males and females. »</div>
+        <p class="loc">Pages 6–7 · fragment 41 sur 118 · distance 0,214</p>
+        <div class="actions">
+          <button class="act">Ouvrir le PDF page 6</button>
+          <button class="act discret">Voir les 3 autres extraits</button>
+        </div>
+      </div>
+
+      <!-- c2 -->
+      <div class="fiche" id="f-c2">
+        <span class="genre synthese">Synthèse</span>
+        <p class="affirmation">Cette distribution suggère un franchissement de la barrière glomérulaire par les fractions les plus fines.</p>
+        <p class="explique">Rapprochement établi entre plusieurs sources, sans qu'aucune ne l'énonce telle quelle. Le raisonnement vous appartient : vérifiez qu'il tient avant de valider la section.</p>
+        <dl class="ref">
+          <dt>Appuyée sur</dt>
+          <dd>Lindqvist et al., 2023 — distribution tissulaire<br>Ferreira &amp; Kwon, 2021 — seuils de filtration glomérulaire</dd>
+        </dl>
+        <div class="actions"><button class="act discret">Convertir en affirmation sourcée</button></div>
+      </div>
+
+      <!-- c3 -->
+      <div class="fiche" id="f-c3">
+        <span class="genre source">Affirmation sourcée</span>
+        <p class="affirmation">Rétention préférentielle des particules inférieures à 5 µm au niveau du cortex ; les fractions supérieures restent confinées au compartiment vasculaire.</p>
+        <dl class="ref">
+          <dt>Source</dt>
+          <dd class="titre">Size-dependent renal distribution of polystyrene microparticles in a murine model</dd>
+          <dt>Auteurs et revue</dt>
+          <dd>Ferreira, J. ; Kwon, S. — <i>Environmental Health Perspectives</i>, 2021</dd>
+          <dt>Identifiant</dt>
+          <dd>10.1289/EHP8834</dd>
+        </dl>
+        <dt style="font-size:.7rem;color:var(--gris)">Extrait retenu</dt>
+        <div class="extrait">« Particles below <mark>5 µm</mark> accumulated preferentially in the renal cortex, whereas larger fractions remained <mark>confined to the vascular compartment</mark> throughout the 28-day exposure. »</div>
+        <p class="loc">Page 4 · fragment 12 sur 96 · distance 0,187</p>
+        <div class="actions">
+          <button class="act">Ouvrir le PDF page 4</button>
+          <button class="act discret">Voir les 2 autres extraits</button>
+        </div>
+      </div>
+
+      <!-- c4 -->
+      <div class="fiche" id="f-c4">
+        <span class="genre hypothese">Hypothèse</span>
+        <p class="affirmation">Le seuil de 5 µm s'appliquerait également aux mammifères marins, dont l'architecture néphronique présente des similarités structurelles.</p>
+        <p class="explique">Extrapolation d'un modèle murin vers une autre classe d'espèces. Aucune donnée expérimentale directe ne l'étaye — le texte le dit, et c'est ce qui la rend défendable. Une hypothèse ne porte jamais de citation : lui en attacher une serait la présenter pour ce qu'elle n'est pas.</p>
+        <div class="actions">
+          <button class="act discret">Chercher des sources sur ce point</button>
+        </div>
+      </div>
+
+      <!-- c5 -->
+      <div class="fiche" id="f-c5">
+        <span class="genre limite">Limite</span>
+        <p class="affirmation">Les protocoles de digestion tissulaire diffèrent entre équipes et leur rendement d'extraction n'a fait l'objet d'aucune inter-comparaison publiée.</p>
+        <p class="explique">Limite méthodologique de la littérature, pas de votre travail. Un jury la relèvera : mieux vaut l'avoir énoncée.</p>
+        <dl class="ref">
+          <dt>Constatée à partir de</dt>
+          <dd>4 sources aux protocoles divergents</dd>
+        </dl>
+        <div class="actions"><button class="act discret">Voir les 4 protocoles</button></div>
+      </div>
+
+      <!-- c6 -->
+      <div class="fiche" id="f-c6">
+        <span class="genre synthese">Synthèse</span>
+        <p class="affirmation">Les concentrations rapportées ne sont donc pas strictement comparables entre études.</p>
+        <p class="explique">Conclusion tirée de la limite énoncée juste avant. Elle ne figure telle quelle dans aucune source.</p>
+        <dl class="ref"><dt>Appuyée sur</dt><dd>La limite méthodologique 5, ci-dessus</dd></dl>
+      </div>
+
+      <!-- c7 -->
+      <div class="fiche" id="f-c7">
+        <span class="genre source">Affirmation sourcée</span>
+        <p class="affirmation">Corrélation entre charge particulaire rénale et marqueurs d'inflammation interstitielle chez le phoque gris.</p>
+        <dl class="ref">
+          <dt>Source</dt>
+          <dd class="titre">Renal particle burden correlates with interstitial inflammation markers in <i>Halichoerus grypus</i><span class="prepub">Prépublication</span></dd>
+          <dt>Auteurs et dépôt</dt>
+          <dd>Nkemdirim, A. ; Sørensen, T. — bioRxiv, 2026</dd>
+          <dt>Identifiant</dt>
+          <dd>10.1101/2026.01.14.578221</dd>
+        </dl>
+        <p class="explique" style="margin-top:-.6rem">Non révisée par les pairs. Le marqueur suit la source jusque dans la bibliographie exportée ; il n'est pas retirable.</p>
+        <dt style="font-size:.7rem;color:var(--gris)">Extrait retenu</dt>
+        <div class="extrait">« A <mark>positive correlation</mark> was observed between total renal particle burden and interstitial inflammation scores (ρ = 0.61, p = 0.004) across the 22 sampled individuals. »</div>
+        <p class="loc">Page 11 · fragment 78 sur 140 · distance 0,241</p>
+        <div class="actions"><button class="act">Ouvrir le PDF page 11</button></div>
+      </div>
+    </aside>
+
+    <footer class="pied">
+      <div class="legende">
+        <span><i class="trait t-source"></i> sourcée</span>
+        <span><i class="trait t-synthese"></i> synthèse</span>
+        <span><i class="trait t-hypothese"></i> hypothèse</span>
+        <span><i class="trait t-limite"></i> limite</span>
+      </div>
+      <label class="bascule">
+        <input type="checkbox" id="filtre"> Ne montrer que ce qui n'est pas sourcé
+      </label>
+      <div class="compte">3 sourcées · 2 synthèses · 1 hypothèse · 1 limite</div>
+    </footer>
+
+  </div>
+</div>
+
+<script>
+const manuscrit = document.getElementById('manuscrit');
+const vide = document.getElementById('vide');
+const claims = [...document.querySelectorAll('.claim')];
+
+function montrer(id){
+  claims.forEach(c => c.setAttribute('aria-current', String(c.dataset.id === id)));
+  document.querySelectorAll('.fiche').forEach(f => f.classList.remove('on'));
+  const f = document.getElementById('f-' + id);
+  if (f){ f.classList.add('on'); vide.style.display = 'none'; }
+}
+
+claims.forEach(c => {
+  c.setAttribute('type','button');
+  c.setAttribute('aria-label','Voir l’origine de cette affirmation');
+  c.addEventListener('click', () => montrer(c.dataset.id));
+});
+
+document.getElementById('filtre').addEventListener('change', e => {
+  manuscrit.classList.toggle('filtre', e.target.checked);
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  const actif = claims.findIndex(c => c.getAttribute('aria-current') === 'true');
+  if (actif < 0) return;
+  e.preventDefault();
+  const suivant = claims[(actif + (e.key === 'ArrowDown' ? 1 : -1) + claims.length) % claims.length];
+  suivant.focus(); montrer(suivant.dataset.id);
+});
+</script>
+</body>
+</html>

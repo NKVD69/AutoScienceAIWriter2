@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maquette 3 — Premier lancement</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=Spectral:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --papier:#FBFAF7; --encre:#1B2430; --filet:#D8D6CF; --gris:#6B7280;
+  --source:#2F6B54; --crayon:#3A5FA8; --epreuve:#A6402E; --graphite:#4A4A4A;
+  --panneau:#F4F2ED; --ambre:#8A6410;
+  --serif:"Spectral",Georgia,serif; --sans:"Archivo",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{background:var(--papier); color:var(--encre); font-family:var(--sans); font-size:15px; line-height:1.5}
+
+.bandeau{display:flex; align-items:baseline; gap:1rem; padding:.85rem 1.5rem; border-bottom:1px solid var(--filet)}
+.marque{font-family:var(--serif); font-size:.95rem; font-weight:500}
+.machine{margin-left:auto; display:flex; gap:1rem; font-size:.75rem; color:var(--gris); flex-wrap:wrap}
+.machine span{display:inline-flex; align-items:center; gap:.35rem}
+.pt{width:.45rem; height:.45rem; border-radius:50%; background:var(--source)}
+.pt.off{background:var(--epreuve)}
+
+.page{max-width:52rem; margin:0 auto; padding:3.5rem 1.5rem 5rem}
+
+/* ouverture : ce que l'outil promet, dit en une phrase */
+.ouverture{margin-bottom:3.25rem}
+.ouverture h1{
+  font-family:var(--serif); font-weight:400; font-size:1.9rem; line-height:1.35;
+  margin:0 0 1rem; max-width:30ch;
+}
+.ouverture p{font-size:.95rem; line-height:1.7; color:var(--gris); max-width:60ch; margin:0}
+
+/* la marche à suivre — c'est réellement une séquence, la numérotation est justifiée */
+.marche{border-top:1px solid var(--filet)}
+.etape{
+  display:grid; grid-template-columns:2.25rem 1fr; gap:1.25rem;
+  padding:1.75rem 0; border-bottom:1px solid var(--filet);
+}
+.rang{
+  font-family:var(--serif); font-size:1.35rem; color:var(--filet);
+  line-height:1; padding-top:.15rem;
+}
+.etape.active .rang{color:var(--encre)}
+.etape.faite .rang{color:var(--source)}
+.etape h2{font-size:1rem; font-weight:600; margin:0 0 .35rem}
+.etape.attente h2, .etape.attente .quoi{color:var(--gris)}
+.quoi{font-size:.88rem; line-height:1.7; margin:0 0 1rem; max-width:62ch; color:var(--gris)}
+
+.champ{display:block; max-width:34rem}
+.champ textarea, .champ input{
+  width:100%; font-family:var(--serif); font-size:1rem; line-height:1.6;
+  padding:.7rem .8rem; background:var(--papier); color:var(--encre);
+  border:1px solid var(--filet); border-radius:2px; resize:vertical;
+}
+.champ textarea:focus, .champ input:focus{outline:2px solid var(--crayon); outline-offset:1px; border-color:var(--crayon)}
+.aide{font-size:.78rem; color:var(--gris); margin:.45rem 0 0; line-height:1.55}
+
+.rangee{display:flex; gap:1.25rem; flex-wrap:wrap; align-items:center; margin-top:1rem}
+button{font-family:var(--sans); cursor:pointer; border-radius:2px}
+button:focus-visible{outline:2px solid var(--crayon); outline-offset:2px}
+.primaire{font-size:.88rem; padding:.58rem 1rem; background:var(--encre); color:var(--papier); border:1px solid var(--encre); font-weight:500}
+.primaire:hover{background:#000}
+.primaire[disabled]{background:var(--filet); border-color:var(--filet); color:#9AA0A6; cursor:not-allowed}
+.lien{background:none; border:0; padding:0; font-size:.85rem; color:var(--crayon); text-decoration:underline; text-underline-offset:.2em}
+
+/* dépôt de sources */
+.depot{
+  border:1px dashed var(--filet); border-radius:2px; padding:1.5rem;
+  text-align:center; max-width:34rem; background:var(--panneau);
+}
+.depot p{margin:0 0 .6rem; font-size:.88rem}
+.depot .ou{font-size:.8rem; color:var(--gris); margin:0}
+.compteur{font-size:.82rem; color:var(--gris); margin-top:.9rem}
+.barre{height:4px; background:#E4E1D8; border-radius:1px; overflow:hidden; max-width:34rem; margin-top:.5rem}
+.barre i{display:block; height:100%; width:0; background:var(--source); transition:width .4s ease}
+@media (prefers-reduced-motion:reduce){.barre i{transition:none}}
+
+.attente .contenu{display:none}
+.etape.attente .verrou{
+  font-size:.8rem; color:var(--gris); border-left:2px solid var(--filet);
+  padding-left:.75rem; margin:0;
+}
+
+/* pied : ce qui ne sort pas de la machine */
+.confiance{
+  margin-top:3rem; border:1px solid var(--filet); background:var(--panneau);
+  padding:1.25rem 1.35rem; max-width:44rem;
+}
+.confiance h3{font-size:.85rem; font-weight:600; margin:0 0 .5rem}
+.confiance p{font-size:.83rem; line-height:1.7; color:var(--gris); margin:0 0 .6rem}
+.confiance p:last-child{margin:0}
+.confiance b{color:var(--encre); font-weight:500}
+</style>
+</head>
+<body>
+
+<header class="bandeau">
+  <span class="marque">Science AI Writer</span>
+  <div class="machine">
+    <span><i class="pt"></i> Modèle chargé · 5,2 Go</span>
+    <span><i class="pt"></i> Quarto 1.5</span>
+    <span><i class="pt off"></i> Recherche en ligne désactivée</span>
+  </div>
+</header>
+
+<main class="page">
+
+  <div class="ouverture">
+    <h1>Un mémoire se construit sur des sources. Commençons par les vôtres.</h1>
+    <p>Cet outil ne rédige rien qu'il ne puisse rattacher à un document que vous
+    avez approuvé. Trois étapes suffisent pour démarrer : dire sur quoi vous
+    travaillez, déposer ce que vous avez déjà lu, valider un plan.</p>
+  </div>
+
+  <div class="marche">
+
+    <!-- 1 -->
+    <section class="etape active" id="e1">
+      <div class="rang">1</div>
+      <div>
+        <h2>Votre sujet</h2>
+        <p class="quoi">Décrivez-le comme vous le feriez à un collègue d'une autre
+        discipline. Deux ou trois phrases valent mieux qu'un titre.</p>
+        <div class="contenu">
+          <label class="champ">
+            <textarea id="sujet" rows="3" placeholder="Par exemple : l'accumulation de microplastiques dans le tissu rénal des mammifères marins de l'Atlantique Nord, et ses effets sur la fonction de filtration."></textarea>
+          </label>
+          <p class="aide">Si vous avez déjà une problématique formulée, vous pourrez la
+          saisir telle quelle à l'étape 3. Elle sera reprise sans être reformulée.</p>
+          <div class="rangee">
+            <button class="primaire" id="b1" disabled>Enregistrer le sujet</button>
+            <span class="aide" id="a1">Écrivez quelques mots pour continuer</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2 -->
+    <section class="etape attente" id="e2">
+      <div class="rang">2</div>
+      <div>
+        <h2>Vos sources</h2>
+        <p class="quoi">Déposez les articles et ouvrages sur lesquels vous vous
+        appuyez déjà. Rien n'est rédigé tant qu'aucune source n'est approuvée.</p>
+        <p class="verrou">Disponible après l'étape 1.</p>
+        <div class="contenu">
+          <div class="depot">
+            <p>Glissez vos PDF ici</p>
+            <p class="ou">ou <button class="lien" id="parcourir">parcourez vos fichiers</button> —
+            vous pourrez aussi chercher en ligne une fois la recherche activée</p>
+          </div>
+          <div class="barre"><i id="progres"></i></div>
+          <p class="compteur" id="compteur">Aucune source pour le moment</p>
+          <div class="rangee">
+            <button class="primaire" id="b2" disabled>Approuver et indexer</button>
+            <span class="aide" id="a2">Trois sources au minimum pour rédiger une section</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3 -->
+    <section class="etape attente" id="e3">
+      <div class="rang">3</div>
+      <div>
+        <h2>Votre plan</h2>
+        <p class="quoi">Un plan vous est proposé à partir du sujet et des sources
+        approuvées. Vous le corrigez, puis vous le validez : la rédaction ne
+        commence qu'après.</p>
+        <p class="verrou">Disponible après l'étape 2.</p>
+        <div class="contenu">
+          <label class="champ" style="margin-bottom:1rem">
+            <input id="probl" placeholder="Votre problématique, si vous en avez déjà une (facultatif)">
+          </label>
+          <p class="aide">Laissée vide, elle sera proposée avec le plan. Renseignée,
+          elle est reprise mot pour mot.</p>
+          <div class="rangee">
+            <button class="primaire" id="b3">Proposer un plan</button>
+            <span class="aide">Environ deux minutes sur votre machine</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <div class="confiance">
+    <h3>Ce qui reste sur votre machine</h3>
+    <p>Tout, par défaut. Le modèle tourne en local, vos sources et votre texte sont
+    dans <b>un seul fichier</b> que vous pouvez copier ou transmettre à votre
+    directeur de recherche.</p>
+    <p>Trois fonctions ont besoin d'Internet : la recherche bibliographique, le
+    téléchargement initial d'un modèle, et la vérification anti-plagiat. Chacune vous
+    demandera l'autorisation <b>séparément</b>, en vous montrant exactement ce qui
+    sortira. Aucune n'est activée aujourd'hui.</p>
+  </div>
+
+</main>
+
+<script>
+const sujet = document.getElementById('sujet');
+const b1 = document.getElementById('b1'), a1 = document.getElementById('a1');
+const e2 = document.getElementById('e2'), e3 = document.getElementById('e3');
+const e1 = document.getElementById('e1');
+const b2 = document.getElementById('b2'), a2 = document.getElementById('a2');
+const compteur = document.getElementById('compteur'), progres = document.getElementById('progres');
+
+sujet.addEventListener('input', () => {
+  const ok = sujet.value.trim().length >= 15;
+  b1.disabled = !ok;
+  a1.textContent = ok ? 'Vous pourrez le modifier plus tard' : 'Écrivez quelques mots pour continuer';
+});
+
+b1.addEventListener('click', () => {
+  e1.classList.remove('active'); e1.classList.add('faite');
+  e2.classList.remove('attente'); e2.classList.add('active');
+  e2.querySelector('.verrou').remove();
+  e2.scrollIntoView({block:'center', behavior: matchMedia('(prefers-reduced-motion:reduce)').matches ? 'auto':'smooth'});
+});
+
+let n = 0;
+document.getElementById('parcourir').addEventListener('click', () => {
+  n += 2 + Math.floor(Math.random() * 2);
+  compteur.textContent = n + (n > 1 ? ' sources déposées, aucune approuvée' : ' source déposée, aucune approuvée');
+  progres.style.width = Math.min(100, n * 12) + '%';
+  b2.disabled = n < 3;
+  a2.textContent = n < 3 ? 'Trois sources au minimum pour rédiger une section'
+                         : 'L’indexation prend environ ' + Math.ceil(n * 4) + ' secondes';
+});
+
+b2.addEventListener('click', () => {
+  e2.classList.remove('active'); e2.classList.add('faite');
+  e3.classList.remove('attente'); e3.classList.add('active');
+  e3.querySelector('.verrou').remove();
+  compteur.textContent = n + ' sources approuvées et indexées';
+  progres.style.width = '100%';
+  e3.scrollIntoView({block:'center', behavior: matchMedia('(prefers-reduced-motion:reduce)').matches ? 'auto':'smooth'});
+});
+</script>
+</body>
+</html>
