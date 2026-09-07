@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.api.v1 import health
+from app.api.v1 import router as api_v1_router
 from app.core.config import get_settings
 from app.core.errors import AppError, ModelNotFoundError, OllamaUnavailableError
 from app.core.logging import configure_logging, get_logger
@@ -58,7 +58,7 @@ def create_app() -> FastAPI:
         500 opaque et le frontend ne pourrait pas la distinguer d'une panne."""
         return JSONResponse(status_code=exc.status_code, content=exc.to_payload())
 
-    app.include_router(health.router, prefix=settings.api_prefix)
+    app.include_router(api_v1_router, prefix=settings.api_prefix)
     return app
 
 

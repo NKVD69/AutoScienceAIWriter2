@@ -29,17 +29,18 @@ def migrations_copy(tmp_path: Path) -> Path:
 
 
 async def test_discover_is_ordered(migrations_copy: Path) -> None:
+    """L'ordre est numerique, pas lexicographique : 010 vient apres 002."""
     (migrations_copy / "010_dix.sql").write_text("SELECT 1;", encoding="utf-8")
-    (migrations_copy / "002_deux.sql").write_text("SELECT 1;", encoding="utf-8")
+    (migrations_copy / "003_trois.sql").write_text("SELECT 1;", encoding="utf-8")
     versions = [v for v, _ in discover(migrations_copy)]
     assert versions == sorted(versions)
-    assert versions == [1, 2, 10]
+    assert versions == [1, 2, 3, 10]
 
 
 async def test_migrations_apply_schema(project_db: Path) -> None:
     async with connect(project_db) as conn:
         applied = await run_migrations(conn)
-        assert applied == [1]
+        assert applied == [1, 2]
         async with conn.execute(
             "SELECT name FROM sqlite_master WHERE type IN ('table','trigger')"
         ) as cur:
@@ -69,9 +70,9 @@ async def test_migrations_idempotent(project_db: Path) -> None:
         first = await run_migrations(conn)
         second = await run_migrations(conn)
         versions = await applied_versions(conn)
-    assert first == [1]
+    assert first == [1, 2]
     assert second == []
-    assert set(versions) == {1}
+    assert set(versions) == {1, 2}
 
 
 async def test_migrations_detect_modified_file(project_db: Path, migrations_copy: Path) -> None:
@@ -98,15 +99,18 @@ async def test_render_substitutes_embedding_dimension() -> None:
 
 async def test_embedding_dimension_appears_only_as_placeholder() -> None:
     """La dimension ne doit pas etre codee en dur dans le DDL (US-002, exigence 3)."""
+    declarations = 0
     for _, path in discover(MIGRATIONS_DIR):
         sql = path.read_text(encoding="utf-8")
-        assert "float[{embedding_dim}]" in sql
-        assert "float[768]" not in sql
+        assert "float[768]" not in sql, f"dimension codee en dur dans {path.name}"
+        declarations += sql.count("float[{embedding_dim}]")
+    # Une seule declaration de la table vectorielle, portee par un parametre.
+    assert declarations == 1
 
 
 async def test_schema_and_migration_agree(project_db: Path, tmp_path: Path) -> None:
-    """schema.sql reste le document canonique : la migration 001 doit produire
-    exactement le meme schema, sinon les deux divergent en silence."""
+    """schema.sql decrit le schema COURANT : la suite complete des migrations
+    doit produire exactement le meme, sinon les deux divergent en silence."""
     schema_sql = (MIGRATIONS_DIR.parent / "schema.sql").read_text(encoding="utf-8")
 
     async with connect(project_db) as conn:

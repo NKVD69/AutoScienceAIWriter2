@@ -180,3 +180,9 @@ CREATE INDEX idx_draft_node       ON draft_section(plan_node_id);
 CREATE INDEX idx_citation_section ON citation(draft_section_id);
 CREATE INDEX idx_task_state       ON task(project_id, state);
 CREATE INDEX idx_audit_project    ON audit_log(project_id, id);
+
+-- Unicite du chainage d'audit (US-701, migration 002). Deux entrees
+-- partageant le meme prev_hash dans un projet sont une fourche : la
+-- contrainte la transforme en violation a l'ecriture plutot qu'en
+-- incoherence decouverte des mois plus tard.
+CREATE UNIQUE INDEX idx_audit_prev ON audit_log(project_id, prev_hash);

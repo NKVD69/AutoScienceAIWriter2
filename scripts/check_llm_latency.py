@@ -10,7 +10,8 @@ ete relus depuis le disque — c'est exactement ce que ADR-003 interdit.
 Le temps au premier token est, lui, mesure cote client : c'est une latence
 percue, pas une metrique du moteur.
 
-Sortie : 0 seuils tenus - 1 seuils depasses - 2 Ollama injoignable.
+Sortie : 0 seuils tenus - 1 seuils depasses - 2 mesure impossible sur cette
+machine (Ollama injoignable, ou aucun token emis dans le budget).
 """
 
 from __future__ import annotations
@@ -36,6 +37,8 @@ except ImportError as exc:  # pragma: no cover - diagnostic d'installation
     sys.exit(2)
 
 N_REQUESTS = 3
+# Budget volontairement court : on mesure une latence d'amorce, pas un texte.
+N_STREAM_TOKENS = 24
 PROMPT = "Donne le titre d'un chapitre d'introduction. Une ligne, sans commentaire."
 
 
@@ -60,16 +63,24 @@ async def run() -> int:
     print(f"  {'-' * 50}")
 
     echecs: list[str] = []
+    non_mesurables: list[str] = []
     for i in range(1, N_REQUESTS + 1):
         debut = time.perf_counter()
-        premier_token_ms = 0.0
-        async for _ in manager.stream_for_agent(AgentName.PLAN, PROMPT, max_tokens=24):
+        # `None` distingue « aucun token recu » de « token recu instantanement ».
+        # Un modele a raisonnement peut consommer tout son budget en reflexion
+        # et ne rien emettre : lire cette absence comme une latence nulle
+        # transformerait un echec en succes.
+        premier_token_ms: float | None = None
+        async for _ in manager.stream_for_agent(AgentName.PLAN, PROMPT, max_tokens=N_STREAM_TOKENS):
             premier_token_ms = (time.perf_counter() - debut) * 1000
             break
 
-        result = await manager.generate_for_agent(AgentName.PLAN, PROMPT, max_tokens=24)
+        result = await manager.generate_for_agent(
+            AgentName.PLAN, PROMPT, max_tokens=N_STREAM_TOKENS
+        )
+        ttft_affiche = "aucun" if premier_token_ms is None else f"{premier_token_ms:.1f}"
         print(
-            f"  {i:<9}{result.load_duration_ms:>10.1f}{premier_token_ms:>10.1f}"
+            f"  {i:<9}{result.load_duration_ms:>10.1f}{ttft_affiche:>10}"
             f"{result.tokens_per_second:>10.1f}{result.total_duration_ms:>11.1f}"
         )
 
@@ -80,7 +91,14 @@ async def run() -> int:
                     f"requete {i} : load_duration {result.load_duration_ms:.1f} ms "
                     f">= {settings.llm_max_load_duration_ms} ms — poids rechargés"
                 )
-            if premier_token_ms >= settings.llm_max_ttft_ms:
+            if premier_token_ms is None:
+                # Environnement insuffisant, pas seuil depasse : un modele a
+                # raisonnement peut depenser tout son budget en reflexion. Le
+                # pack reserve le code 2 a la mesure impossible.
+                non_mesurables.append(
+                    f"requete {i} : aucun token emis en {N_STREAM_TOKENS} tokens de budget"
+                )
+            elif premier_token_ms >= settings.llm_max_ttft_ms:
                 echecs.append(
                     f"requete {i} : ttft {premier_token_ms:.0f} ms >= {settings.llm_max_ttft_ms} ms"
                 )
@@ -93,6 +111,12 @@ async def run() -> int:
             print(f"  [ECHEC] {e}")
         print(f"check_llm_latency : {len(echecs)} seuil(s) depasse(s)")
         return 1
+    print("  [OK ] load_duration sous le seuil sur toute requete posterieure a la premiere")
+    if non_mesurables:
+        for n in non_mesurables:
+            print(f"  [NON MESURE] {n}")
+        print("check_llm_latency : persistance verifiee, temps au premier token non mesurable")
+        return 2
     print("check_llm_latency : seuils tenus sur les requetes posterieures a la premiere")
     return 0
 

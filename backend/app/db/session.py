@@ -117,8 +117,17 @@ async def transaction(conn: aiosqlite.Connection) -> AsyncIterator[aiosqlite.Con
     `aiosqlite` hérite du mode `autocommit` implicite de `sqlite3` ; un
     `BEGIN` explicite est le seul moyen d'obtenir une unité atomique
     couvrant plusieurs tables.
+
+    **`BEGIN IMMEDIATE`, pas `BEGIN`.** Une transaction différée qui lit
+    avant d'écrire commence en lecteur puis tente de passer en écrivain ;
+    SQLite refuse alors immédiatement par `SQLITE_BUSY` **sans honorer
+    `busy_timeout`**, parce qu'attendre créerait un interblocage entre deux
+    lecteurs voulant tous deux écrire. C'est exactement le motif du journal
+    d'audit — lire le dernier hash, puis insérer — et la promesse d'ADR-001
+    (« `busy_timeout` absorbe la contention en écriture ») ne tient que si
+    le verrou d'écriture est pris dès l'ouverture.
     """
-    await conn.execute("BEGIN")
+    await conn.execute("BEGIN IMMEDIATE")
     try:
         yield conn
     except BaseException:
