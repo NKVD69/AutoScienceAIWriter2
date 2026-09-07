@@ -1,7 +1,7 @@
 # Spécifications techniques détaillées V0.3 — Science AI Writer IDE
 
-**Statut :** proposé — remplace la V0.2 · révision 0.3.1
-**Date :** 2026-09-05, révisé le 2026-09-06
+**Statut :** proposé — remplace la V0.2 · révision 0.3.2
+**Date :** 2026-09-05, révisé les 2026-09-06 et 2026-09-07
 **Autorité :** ce document est subordonné aux ADR. En cas de divergence, l'ADR fait foi.
 
 ## Journal des modifications V0.2 → V0.3
@@ -19,6 +19,22 @@
 | 13.1 | `pyproject.toml` source unique des dépendances | D-09 | — |
 | 12.3 | Budget VRAM global mesuré en intégration continue | D-10 | ADR-003 |
 | 9.5 | Annexe de déclaration d'usage de l'IA à l'export | D-11 | — |
+
+### Journal des modifications V0.3.1 → V0.3.2
+
+Mise en cohérence avec ADR-014 (moteur LM Studio) et ADR-015 (modèle 31B,
+déversement CPU/RAM assumé). Les deux ADR font foi ; ce document les applique.
+
+| § | Modification | Motif | ADR |
+|---|---|---|---|
+| 6.1 | Moteur LM Studio, modèle `google/gemma-4-31b`, persistance par `ttl` | Le moteur devient un réglage ; le modèle ne tient plus en VRAM, par choix | ADR-014, ADR-015 |
+| 6.2 | Critère de persistance dépendant du moteur : état du modèle sous LM Studio, `load_duration` sous Ollama | `load_duration` n'existe pas chez LM Studio ; l'état du modèle est un observable plus direct | ADR-014 |
+| 6.3 | Nom du modèle de code spécialisé précisé par moteur | Cohérence | ADR-014 |
+| 6.4 | « Hors d'Ollama » devient « hors du serveur d'inférence » | Le modèle d'embedding est installé dans LM Studio ; ADR-013 tient | ADR-013 |
+| 12.1 | Budget VRAM remplacé par un budget mémoire ; la RAM devient la ressource contrainte | La saturation de la VRAM est voulue ; 4,2 Go de RAM libres | ADR-015 |
+| 12.2 | Budgets de génération levés ; les seuils restants requalifiés en détecteurs de panne | Le temps de génération n'est pas une contrainte du produit | ADR-015 |
+| 12.3 | `check_vram_budget.py` respécifié : éviction, OOM et RAM au plus bas | Mesurer une marge de VRAM n'a plus d'objet | ADR-015 |
+| 13.1 | Dépendance `ollama` retirée ; dépendances de développement explicitées | Elle n'était jamais importée ; les deux backends sont écrits sur `httpx` | — |
 
 ### Journal des modifications V0.3 → V0.3.1
 
@@ -297,23 +313,38 @@ Ces trois contrôles sont **syntaxiques**, donc fiables — ils ne dépendent pa
 
 ## 6. Couche LLM
 
-### 6.1 Modèle et persistance
+### 6.1 Modèle et persistance `[RÉVISÉ — ADR-014, ADR-015]`
 
-Modèle unique `qwen2.5-7b-instruct-q4_k_m` (~5,2 Go), chargé au démarrage avec `keep_alive=-1`. Aucun `load`/`unload` par agent.
+**Moteur : LM Studio**, via son API native `/api/v0` — seule à publier les statistiques de génération et l'état de chargement des modèles. L'API OpenAI `/v1` du même serveur ne les expose pas. Ollama reste implémenté derrière l'interface `LLMBackend` et sélectionnable par `llm_backend`.
 
-### 6.2 Critère de persistance `[RÉVISÉ — D-04]`
+**Modèle unique `google/gemma-4-31b` (Q8_0, 33,8 Go).** Il ne tient pas en VRAM : `llama.cpp` répartit les couches entre GPU et CPU, et le reste réside en RAM. Ce déversement est un **mode nominal**, décidé par ADR-015, non une dégradation. L'hypothèse d'ADR-003 selon laquelle un modèle de 30B provoquerait un OOM sur 10 Go supposait qu'il devait tenir entièrement en VRAM ; cette hypothèse est fausse.
 
-La vérification porte sur `load_duration` retourné par Ollama, non sur le cache KV — non observable via l'API. Seuils : `load_duration < 50 ms` sur toute requête postérieure à la première, temps au premier token < 2 s.
+**Persistance : `ttl` long, transmis à chaque requête.** LM Studio n'accepte pas de durée infinie ; on demande une durée que le service ne dépassera pas en usage (24 h par défaut). Le paramètre se réarme à chaque appel : une seule requête sans `ttl` rendrait le modèle éligible au déchargement, exactement comme un `keep_alive=0` sous Ollama.
 
-Le gain réel de cache passe par la **stabilité octet pour octet du prompt système** de chaque agent, contrôlée par un test dédié.
+Aucun `load`/`unload` par agent. La spécialisation passe par le prompt système.
+
+### 6.2 Critère de persistance `[RÉVISÉ — D-04, puis ADR-014]`
+
+La vérification ne porte pas sur le cache KV, non observable par aucune des deux API. **Elle dépend du moteur, parce que les moteurs ne publient pas la même chose.**
+
+| Moteur | Observable | Seuil |
+|---|---|---|
+| LM Studio | `state: loaded` sur `/api/v0/models`, relevé avant et après une série de requêtes | le modèle est résident, ou il ne l'est pas |
+| Ollama | `load_duration` de la réponse | `< 50 ms` sur toute requête postérieure à la première |
+
+Sous LM Studio, la résidence est donc **observée directement** au lieu d'être inférée d'une durée — un critère plus fort, pas un repli.
+
+**Une métrique qu'un moteur ne publie pas vaut `None`, jamais `0`.** Un `load_duration` à zéro se lirait comme « poids restés résidents », c'est-à-dire comme la preuve même de ce que la vérification cherche à établir. Et une métrique *remplacée* par un autre observable n'est pas une métrique *manquante* : `check_llm_latency.py` la signale comme information, sans dégrader son verdict.
+
+Le gain réel de cache passe par la **stabilité octet pour octet du prompt système** de chaque agent, contrôlée par un test dédié. Sous Ollama s'y ajoute la stabilité de `num_ctx` : en changer force un rechargement complet des poids.
 
 ### 6.3 Arbitrage code `[EXPLICITÉ — D-08]`
 
-Le modèle généraliste est moins performant en génération de code que `qwen2.5-coder-7b`. Arbitrage assumé : latence contre qualité de code. Option `code_model_enabled` (défaut `false`) : si activée **et** VRAM ≥ 12 Go, charge un second résident réservé à l'agent code. Sur 10 Go, l'option est refusée au démarrage avec un message explicite.
+Le modèle généraliste est moins performant en génération de code qu'un modèle spécialisé (`qwen/qwen3-coder-next` sous LM Studio, `qwen2.5-coder-7b` sous Ollama). Arbitrage assumé : latence contre qualité de code. Option `code_model_enabled` (défaut `false`) : si activée **et** VRAM ≥ 12 Go, charge un second résident réservé à l'agent code. Sur 10 Go, l'option est refusée au démarrage avec un message explicite.
 
 ### 6.4 Embeddings `[RÉVISÉ — D-05]`
 
-Hors d'Ollama. `fastembed` (ONNX Runtime, CPU) ou `sentence-transformers` avec `device="cpu"`. Modèle `nomic-embed-text-v1.5`, dimension 768.
+Hors du serveur d'inférence, quel qu'il soit. `text-embedding-nomic-embed-text-v1.5` est installé dans LM Studio ; l'y router le chargerait sur GPU et évincerait le modèle principal pendant l'ingestion. ADR-013 tient. `fastembed` (ONNX Runtime, CPU) ou `sentence-transformers` avec `device="cpu"`. Modèle `nomic-embed-text-v1.5`, dimension 768.
 
 **Préfixes obligatoires :** `search_document: ` à l'indexation, `search_query: ` à la requête. Leur omission dégrade nettement le rappel et constitue un défaut bloquant.
 
@@ -467,29 +498,51 @@ Comparaison hors ligne, sans aucune sortie réseau, contre les chunks ingérés 
 
 ## 12. Performance et budgets
 
-### 12.1 Budget VRAM
+### 12.1 Budget mémoire `[RÉVISÉ — ADR-015]`
 
-| Poste | Cible |
-|---|---|
-| Modèle principal Q4_K_M | ≤ 5,4 Go |
-| Cache KV (contexte 8 k) | ≤ 2,0 Go |
-| Marge système et pilote | ≥ 1,0 Go |
-| Embeddings | **0 Go** (CPU, ADR-013) |
-| **Plafond observé** | **< 9,0 Go** |
+**Le plafond de VRAM ne gouverne plus.** Le modèle retenu sature délibérément la carte et déverse le reste en RAM. Un budget de marge n'a plus d'objet ; le critère devient l'absence d'éviction et d'OOM sur un cycle complet.
 
-### 12.2 Latences cibles
+Relevé du 7 septembre 2026, `google/gemma-4-31b` Q8_0 résident :
 
-| Opération | Cible |
-|---|---|
-| `load_duration` après première requête | < 50 ms |
-| Temps au premier token | < 2 s |
-| Recherche KNN, 50 000 chunks | < 200 ms |
-| Ingestion, 500 chunks de 512 tokens | < 180 s (CPU 8 cœurs) |
-| Export PDF, 150 pages | < 90 s |
+| Poste | Mesure | Statut |
+|---|---|---|
+| VRAM occupée | 9 713 / 10 240 Mo | saturation voulue |
+| RAM occupée | 59,7 / 63,9 Go | **ressource critique** |
+| RAM disponible | 4,2 Go | à surveiller |
+| Embeddings | **0 Go de VRAM** (CPU, ADR-013) | inchangé |
+
+**La RAM est désormais la ressource contrainte, pas la VRAM.** ADR-013 place les embeddings sur CPU, donc en RAM, et §7.1 prévoit l'ingestion de 50 PDF. Les deux charges se disputent les mêmes 4,2 Go restants. Le budget d'ingestion de §12.2 a été établi sans modèle de 34 Go en mémoire : il doit être revérifié avant l'implémentation de l'ingestion. C'est, à la date de cette révision, le risque le plus concret du dossier.
+
+Porte de sortie si la RAM devient bloquante : `google/gemma-4-31b-qat` (Q4_0), installé, environ deux fois plus compact.
+
+### 12.2 Latences cibles `[RÉVISÉ — ADR-015]`
+
+**Les budgets de génération sont levés.** Le temps de production d'un document n'est pas une contrainte du produit : un mémoire se rédige sur des semaines, et la qualité du modèle prime. Ce qui subsiste n'est plus un budget de confort mais un **détecteur de panne**.
+
+| Opération | Cible | Nature |
+|---|---|---|
+| Modèle résident avant et après une série | vrai | critère de persistance (§6.2) |
+| `load_duration` après première requête | < 50 ms *si le moteur le publie* | détecteur de rechargement |
+| Temps au premier token | < 15 s | détecteur de rechargement, **non un confort** |
+| Recherche KNN, 50 000 chunks | < 200 ms | budget réel |
+| Ingestion, 500 chunks de 512 tokens | < 180 s (CPU 8 cœurs) | budget réel, **à revérifier** (§12.1) |
+| Export PDF, 150 pages | < 90 s | budget réel |
+
+Le seuil de 15 s pour le premier token n'est pas une cible d'expérience : il sépare le régime établi (3,6 à 3,8 s mesurés) d'un rechargement de poids (plusieurs minutes). Le supprimer ne détecterait plus rien.
+
+**Ordre de grandeur à connaître.** À 0,6 token/s, une section de 1 500 mots demande environ 55 minutes, et un mémoire de quarante sections de l'ordre de 36 heures de génération cumulée. Conséquence d'interface, non de performance : l'attente synchrone est exclue, le suivi de progression et la reprise après arrêt deviennent structurants (§2, pont SSE).
 
 ### 12.3 Vérification continue `[NOUVEAU — D-10]`
 
-`scripts/check_vram_budget.py` échantillonne `nvidia-smi --query-gpu=memory.used` toutes les 500 ms pendant un cycle complet — chargement du modèle, ingestion de 50 PDF, rédaction d'une section, export — et échoue au-delà de 9,0 Go. Le test s'ignore proprement en l'absence de GPU NVIDIA.
+`scripts/check_vram_budget.py` échantillonne la mémoire pendant un cycle complet — chargement du modèle, ingestion de 50 PDF, rédaction d'une section, export.
+
+**Le critère a changé avec ADR-015.** Mesurer une marge de VRAM n'a plus de sens quand la saturation est voulue. Le script doit constater :
+
+- que le modèle reste **résident** du début à la fin du cycle, sans éviction ;
+- qu'aucun OOM ne survient, côté GPU comme côté RAM ;
+- la **RAM disponible au plus bas** du cycle, qui est la grandeur réellement contrainte.
+
+`vram_offload_expected` signale que le déversement est un choix : le script ne doit pas le rapporter comme un dépassement. Le test s'ignore proprement en l'absence de GPU NVIDIA.
 
 ---
 
@@ -499,7 +552,11 @@ Comparaison hors ligne, sans aucune sortie réseau, contre les chunks ingérés 
 
 `pyproject.toml` est la **source unique**. `requirements.txt` est un artefact verrouillé, généré par `uv pip compile` dans `check_all`, jamais édité à la main.
 
-Backend : `fastapi`, `uvicorn`, `pydantic`, `pydantic-settings`, `aiosqlite`, `sqlite-vec`, `httpx`, `pymupdf`, `fastembed`, `langgraph`, `ollama`, `pywin32` (Windows uniquement).
+Backend : `fastapi`, `uvicorn`, `pydantic`, `pydantic-settings`, `aiosqlite`, `sqlite-vec`, `httpx`, `pymupdf`, `fastembed`, `langgraph`, `pywin32` (Windows uniquement).
+
+Développement : `pytest`, `pytest-asyncio`, `pytest-cov`, `ruff`. `pytest-asyncio` n'est pas facultatif : la base de code est intégralement asynchrone.
+
+**Aucun paquet client de moteur d'inférence.** Ni `ollama`, ni `lmstudio`. Les deux backends sont écrits directement sur `httpx` : leurs API sont de simples requêtes HTTP locales, et une dépendance de plus n'apporterait qu'un couplage à une bibliothèque tierce sur le chemin le plus critique du produit. `ollama` figurait dans la V0.3 sans jamais être importé.
 
 ### 13.2 Commandes de vérification
 

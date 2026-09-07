@@ -23,7 +23,10 @@ dependencies = [
   "pymupdf>=1.24",
   "fastembed>=0.3",
   "langgraph>=0.2",
-  "ollama>=0.3",
+  # Aucun paquet client de moteur d'inférence (§13.1) : LM Studio et Ollama
+  # sont deux API HTTP locales, appelées directement par httpx. Une
+  # dépendance de plus ne ferait qu'ajouter un couplage sur le chemin le
+  # plus critique du produit.
   "pywin32>=306 ; sys_platform == 'win32'",
 ]
 
