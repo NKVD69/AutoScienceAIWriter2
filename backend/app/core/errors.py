@@ -102,3 +102,50 @@ class DimensionMismatchError(AppError):
             expected=expected,
             found=found,
         )
+
+
+class OllamaUnavailableError(AppError):
+    """Le démon Ollama ne répond pas.
+
+    ADR-003 : le message porte la remédiation par système d'exploitation.
+    Un « connection refused » brut oblige l'utilisateur à deviner qu'un
+    service doit tourner.
+    """
+
+    code = "OLLAMA_UNAVAILABLE"
+    status_code = 503
+
+    @classmethod
+    def actionable(cls, base_url: str, detail: str = "") -> OllamaUnavailableError:
+        message = (
+            f"Ollama est injoignable sur {base_url}. "
+            "Windows : installer depuis https://ollama.com/download puis lancer "
+            "« ollama serve » (le service démarre en général automatiquement). "
+            "Linux : « curl -fsSL https://ollama.com/install.sh | sh » puis "
+            "« systemctl --user start ollama »."
+        )
+        if detail:
+            message = f"{message} Détail : {detail}"
+        return cls(message, base_url=base_url)
+
+
+class ModelNotFoundError(AppError):
+    """Le modèle attendu n'est pas présent localement.
+
+    Aucun téléchargement automatique : les poids sortent du réseau, donc du
+    périmètre de consentement `model_download` (ADR-010). La commande est
+    proposée, l'utilisateur décide.
+    """
+
+    code = "MODEL_NOT_FOUND"
+    status_code = 503
+
+    @classmethod
+    def with_pull_command(cls, model: str) -> ModelNotFoundError:
+        return cls(
+            f"Le modèle « {model} » n'est pas présent localement. "
+            f"Le téléchargement relève du consentement model_download et n'est "
+            f"pas déclenché automatiquement. Commande : ollama pull {model}",
+            model=model,
+            pull_command=f"ollama pull {model}",
+        )

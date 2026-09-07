@@ -15,8 +15,9 @@ from fastapi.responses import JSONResponse
 
 from app.api.v1 import health
 from app.core.config import get_settings
-from app.core.errors import AppError
+from app.core.errors import AppError, ModelNotFoundError, OllamaUnavailableError
 from app.core.logging import configure_logging, get_logger
+from app.llm.manager import build_manager
 
 logger = get_logger(__name__)
 
@@ -27,6 +28,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     configure_logging(settings.log_level)
     settings.projects_dir.mkdir(parents=True, exist_ok=True)
     logger.info("Science AI Writer IDE %s — données : %s", settings.version, settings.data_dir)
+
+    # ADR-003 : le modèle est chargé une fois, ici, et reste résident. Un
+    # moteur absent ne doit pas empêcher le service de démarrer : la
+    # bibliographie, l'import de sources et l'export n'en dépendent pas, et
+    # `/health` rapportera `llm: unavailable`.
+    app.state.llm = build_manager()
+    try:
+        await app.state.llm.startup()
+    except (OllamaUnavailableError, ModelNotFoundError) as exc:
+        logger.warning("Modèle non chargé au démarrage : %s", exc.message)
+
     yield
     logger.info("Arrêt du service")
 

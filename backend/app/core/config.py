@@ -37,9 +37,15 @@ class Settings(BaseSettings):
     sqlite_busy_timeout_ms: int = 5000
 
     # --- LLM (ADR-003) ---------------------------------------------------
-    ollama_base_url: str = "http://127.0.0.1:11434"
+    llm_backend: str = "ollama"
+    llm_base_url: str = "http://127.0.0.1:11434"
     llm_model: str = "qwen2.5:7b-instruct-q4_K_M"
-    llm_keep_alive: int = -1
+    llm_context_tokens: int = 8192
+    llm_temperature_default: float = 0.2
+    # Seuils observables. `load_duration` est la seule grandeur qui atteste
+    # la persistance des poids : le cache KV n'est pas exposé par l'API.
+    llm_max_load_duration_ms: int = 50
+    llm_max_ttft_ms: int = 2000
     code_model_enabled: bool = False
     code_model: str = "qwen2.5-coder:7b"
     code_model_min_vram_mb: int = 12_288
