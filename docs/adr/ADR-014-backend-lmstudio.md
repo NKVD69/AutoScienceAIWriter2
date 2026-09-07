@@ -37,6 +37,12 @@ n'est pas une gêne, c'est une interruption de service.
    LM Studio ne publie pas `load_duration`. `/api/v0/models` publie en revanche
    `state: loaded | not-loaded` : la résidence s'observe **directement**, avant
    et après une série de requêtes.
+
+   Corollaire pour l'outillage : une métrique *remplacée* n'est pas une métrique
+   *manquante*. `check_llm_latency.py` signale l'absence de `load_duration` sous
+   LM Studio comme une information, non comme une mesure impossible — la
+   traiter en code 2 rendrait le contrôle définitivement non concluant sur le
+   moteur par défaut, donc sans usage.
 5. **Une métrique absente vaut `None`, jamais `0`.** `LLMResult.load_duration_ms`
    est optionnel. Un zéro se lirait comme « poids restés résidents », c'est-à-dire
    comme la preuve de ce que l'ADR cherche à établir, alors qu'il ne signifierait

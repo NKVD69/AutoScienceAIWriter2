@@ -16,7 +16,11 @@ publient pas la meme chose.**
 Ne jamais traiter une metrique absente comme une metrique a zero : cela
 transformerait « le moteur ne mesure pas » en « rien n'a ete recharge ».
 
-Sortie : 0 seuils tenus - 1 critere non tenu - 2 mesure impossible sur cette
+Une metrique qu'un moteur ne publie pas n'est pas une mesure impossible : si
+un autre observable etablit le meme fait, le critere est tenu. L'absence de
+`load_duration` sous LM Studio est donc informative, pas disqualifiante.
+
+Sortie : 0 criteres tenus - 1 critere non tenu - 2 mesure impossible sur cette
 machine (moteur injoignable, modele absent, ou aucun token emis).
 """
 
@@ -81,6 +85,7 @@ async def run() -> int:
 
     echecs: list[str] = []
     non_mesurables: list[str] = []
+    informations: list[str] = []
 
     for i in range(1, N_REQUESTS + 1):
         debut = time.perf_counter()
@@ -109,9 +114,15 @@ async def run() -> int:
             continue
 
         if result.load_duration_ms is None:
-            non_mesurables.append(
+            # Metrique REMPLACEE, non pas manquante. ADR-014 point 4 designe
+            # l'etat du modele comme critere de persistance sous LM Studio :
+            # ce n'est pas une mesure impossible sur cette machine, c'est un
+            # autre observable, verifie plus bas. Le degrader en code 2
+            # rendrait le controle definitivement non concluant sur le moteur
+            # par defaut, donc inutile.
+            informations.append(
                 f"le moteur « {settings.llm_backend} » ne publie pas load_duration ; "
-                "la residence est verifiee par l'etat du modele"
+                "la persistance est etablie par l'etat du modele (ADR-014)"
             )
         elif result.load_duration_ms >= settings.llm_max_load_duration_ms:
             echecs.append(
@@ -142,6 +153,9 @@ async def run() -> int:
         echecs.append(
             f"le modele {settings.llm_model} n'est plus resident apres {N_REQUESTS} requetes"
         )
+
+    for info in dict.fromkeys(informations):
+        print(f"  [INFO] {info}")
 
     if echecs:
         for e in echecs:
