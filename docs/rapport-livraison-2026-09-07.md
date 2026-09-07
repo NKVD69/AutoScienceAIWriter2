@@ -1,7 +1,7 @@
 # Rapport de livraison — 7 septembre 2026
 
 Traitement du Prompt Pack V0.3.1. Poste : Windows 11 · Python 3.11.15 ·
-SQLite 3.53.1 · RTX 3080 10 Go · Ollama présent.
+SQLite 3.53.1 · RTX 3080 10 Go · 64 Go de RAM · LM Studio et Ollama présents.
 
 Le format de rapport imposé par `00-source-of-truth.md` §7 exige une section
 « Réserves » à chaque story. Elle est consolidée ici, le contenu des fichiers
@@ -145,11 +145,74 @@ porté au-delà de 600 s pour être exécutable ici.
 Dans l'ordre du plan d'exécution, en tenant compte de ce qui est mesurable
 sur ce poste :
 
-1. `ollama pull qwen2.5:7b-instruct-q4_K_M`, puis spike 02 en entier — c'est
-   le seul point ouvert qui puisse rouvrir ADR-003 ou ADR-008.
+1. **Spike 02 contre `google/gemma-4-31b`** — c'est le seul point ouvert qui
+   puisse rouvrir ADR-008 : le circuit breaker à trois essais suppose qu'un
+   modèle local produit du JSON conforme de façon fiable. Le harnais doit
+   d'abord voir son `timeout` porté au-delà de 600 s, et son client pointé sur
+   LM Studio. *(Recommandation initiale — `ollama pull qwen2.5` — caduque
+   depuis ADR-014.)*
 2. **US-101** (CRUD projets), qui ferme le registre de projets dont
    `api/v1/audit.py` simule aujourd'hui la résolution par convention de
    nommage.
-3. **US-005** (embeddings CPU) — attention : le modèle `nomic-embed-text-v1.5`
-   se télécharge, ce qui relève de `model_download`.
+3. **US-005** (embeddings CPU) — deux points d'attention. Le modèle
+   `nomic-embed-text-v1.5` se télécharge, ce qui relève de `model_download` ;
+   et il ne reste que 4,2 Go de RAM libres, alors qu'ADR-013 exige de le faire
+   tourner sur CPU. Vérifier la disponibilité mémoire avant d'écrire le code.
 4. **US-004** (sandbox), indépendante, et **US-102** (ingestion) après US-005.
+
+---
+
+## 4. Amendements du moteur d'inférence — ADR-014 et ADR-015
+
+Deux décisions du porteur de projet, prises après la livraison initiale et
+consignées en ADR plutôt qu'appliquées en silence.
+
+### ADR-014 — LM Studio remplace Ollama
+
+Réalise le point 5 d'ADR-003, qui prévoyait un backend alternatif derrière
+`LLMBackend`. Ollama reste implémenté et sélectionnable.
+
+Deux conséquences techniques non négociables :
+
+- **`load_duration` n'existe pas chez LM Studio.** Le critère de §6.2 est
+  inapplicable. Toute durée non publiée vaut `None`, jamais `0` : un zéro se
+  lirait comme « poids restés résidents », c'est-à-dire comme la preuve même
+  de ce qu'ADR-003 cherche à établir.
+- **La résidence s'observe directement** par `state: loaded` sur
+  `/api/v0/models`, ce qui est un meilleur critère que l'inférence depuis une
+  durée.
+
+### ADR-015 — modèle 31B, déversement CPU/RAM assumé
+
+Renverse une option explicitement écartée par ADR-003 (« Modèle 30B quantifié
+— OOM immédiat sur 10 Go »). L'hypothèse sous-jacente — le modèle doit tenir
+entièrement en VRAM — ne tient pas : `llama.cpp` répartit les couches.
+
+Mesures fondant la décision : VRAM 9 713 / 10 240 Mo · RAM 59,7 / 63,9 Go ·
+0,6 token/s · TTFT 3,6 à 3,8 s · une section de 1 500 mots en ~55 minutes.
+
+### Réserves nouvelles
+
+**La RAM devient la ressource critique, et elle est presque pleine.** 4,2 Go
+libres sur 63,9. ADR-013 place les embeddings sur CPU, donc en RAM, et US-102
+prévoit d'ingérer 50 PDF. Les deux charges se disputeront la même ressource.
+Le budget d'ingestion de §12.2 — 500 chunks en moins de 180 s — a été établi
+sans modèle de 34 Go en mémoire. À revérifier avant US-005 et US-102 ; c'est,
+à ce jour, le risque le plus concret du dossier.
+
+**US-006 est à respécifier.** Mesurer une marge de VRAM n'a plus de sens quand
+la saturation est voulue. Le critère utile devient l'absence d'éviction et
+d'OOM sur un cycle complet.
+
+**US-801 et US-DASH-001 changent de nature.** Une section produite en une
+heure interdit l'attente synchrone : le suivi de progression et la reprise
+après arrêt deviennent structurants.
+
+**Trois points des spécifications restent à réécrire** : §6.1 (nomme
+`qwen2.5-7b-instruct-q4_k_m`), §6.2 (critère `load_duration`, budgets de
+latence) et §13.1 (dépendance `ollama`, déclarée mais inutilisée — les deux
+backends sont écrits sur `httpx`).
+
+**Un piège de configuration.** `SAW_LLM_BASE_URL` est désormais dérivé du
+moteur actif. Laissé dans un `.env`, il serait ignoré en silence : utiliser
+`SAW_LMSTUDIO_BASE_URL` ou `SAW_OLLAMA_BASE_URL`.

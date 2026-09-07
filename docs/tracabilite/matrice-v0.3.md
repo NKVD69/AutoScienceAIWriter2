@@ -248,3 +248,23 @@ inchangés ; seul le moteur qui les applique devient un réglage.
 | Spéc. §6.1 (modèle `qwen2.5-7b-instruct-q4_k_m`) | à réécrire : aucun modèle de ce profil n'est installé |
 | Spéc. §13.1 (dépendance `ollama`) | à retirer : la dépendance est déclarée mais inutilisée, les deux backends étant écrits sur `httpx` |
 | ADR-013 (embeddings hors GPU) | **inchangé**, bien que `text-embedding-nomic-embed-text-v1.5` soit installé dans LM Studio |
+
+---
+
+## 8. Amendement du 7 septembre 2026 — ADR-015
+
+Le modèle par défaut devient `google/gemma-4-31b`, avec déversement CPU/RAM
+assumé ([ADR-015](../adr/ADR-015-modele-31b-deversement-cpu.md)).
+
+| Élément du dossier | État |
+|---|---|
+| ADR-003, « Options écartées » : modèle 30B rejeté pour OOM | **renversé** — `llama.cpp` répartit les couches, il n'y a pas d'OOM |
+| Spéc. §12.1 (VRAM < 9,0 Go) | ne gouverne plus ; critère remplacé par « aucune éviction, aucun OOM » |
+| Spéc. §12.2 (TTFT < 2 s, `load_duration` < 50 ms) | levé pour la génération ; le seuil devient un détecteur de rechargement |
+| US-006 (`check_vram_budget.py`) | **à respécifier** : mesurer l'éviction, non une marge de VRAM |
+| ADR-013 (embeddings CPU) | **tension nouvelle** : 4,2 Go de RAM libres seulement, les embeddings CPU et le modèle se disputent la même ressource |
+| US-102 (ingestion, 500 chunks < 180 s) | budget établi sans modèle de 34 Go en mémoire — à revérifier |
+| US-801, US-DASH-001 | une section demande ~55 min : le suivi de progression et la reprise deviennent structurants, non décoratifs |
+
+Points d'ADR-003 **inchangés** : modèle unique résident, aucun swap par agent,
+prompts système figés, second modèle de code refusé sous 12 Go de VRAM.

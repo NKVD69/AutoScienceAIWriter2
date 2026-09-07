@@ -15,7 +15,9 @@ from app.llm.base import LLMBackend
 from app.llm.manager import LLMManager, resolve_backend_factory
 from app.llm.prompts.registry import AgentName
 
-MODELE = "google/gemma-4-e4b"
+# Identifiant arbitraire : les tests unitaires ne doivent pas changer quand
+# le modèle par défaut change. Le défaut est verifie par un test dedie.
+MODELE = "editeur/modele-de-test"
 
 
 def models_payload(state: str = "loaded") -> dict:
@@ -97,6 +99,27 @@ def test_factory_refuses_unknown_engine() -> None:
 def test_default_backend_is_lmstudio() -> None:
     assert get_settings().llm_backend == "lmstudio"
     assert get_settings().llm_base_url == get_settings().lmstudio_base_url
+
+
+def test_default_model_is_documented() -> None:
+    """ADR-015 : le modele par defaut deverse deliberement sur CPU/RAM.
+
+    Ce test existe pour qu'un changement de modele par defaut soit un acte
+    explicite, pas un effet de bord d'une modification de configuration.
+    """
+    settings = get_settings()
+    assert settings.llm_model == "google/gemma-4-31b"
+    assert settings.vram_offload_expected is True
+
+
+def test_latency_threshold_detects_reload_not_discomfort() -> None:
+    """ADR-015 point 5 : le seuil separe le regime etabli (3,6-3,8 s mesures)
+    d'un rechargement de poids (plusieurs minutes)."""
+    settings = get_settings()
+    assert settings.llm_max_ttft_ms > 4_000, "un seuil sous le regime etabli echouerait en continu"
+    assert settings.llm_max_ttft_ms < 60_000, (
+        "un seuil trop haut ne detecterait plus un rechargement"
+    )
 
 
 # --- Residence -----------------------------------------------------------

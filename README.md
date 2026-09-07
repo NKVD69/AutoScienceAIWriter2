@@ -47,9 +47,26 @@ qui amende ADR-003). Le serveur local n'est pas démarré automatiquement :
 lms server start
 ```
 
-Le modèle par défaut est `google/gemma-4-e4b`, seul modèle installé compatible
-avec le budget VRAM de §12.1. Ollama reste disponible derrière la même
-interface : `SAW_LLM_BACKEND=ollama` avec un `SAW_LLM_MODEL` correspondant.
+Le modèle par défaut est **`google/gemma-4-31b`** (Q8_0, 33,8 Go). Il ne tient
+pas en VRAM : LM Studio en déverse une partie sur le CPU et la RAM. C'est un
+mode nominal, décidé par [ADR-015](docs/adr/ADR-015-modele-31b-deversement-cpu.md),
+pas une dégradation.
+
+Ce que cela implique concrètement :
+
+| Grandeur | Mesure |
+|---|---|
+| VRAM occupée | 9 713 / 10 240 Mo |
+| RAM occupée | 59,7 / 63,9 Go |
+| Débit | ~0,6 token/s |
+| Section de 1 500 mots | ~55 minutes |
+
+La qualité du modèle prime sur le temps de génération : un mémoire se rédige
+sur des semaines. Les budgets de latence de §12.2 sont levés en conséquence,
+et `llm_max_ttft_ms` ne sert plus qu'à détecter un rechargement de poids.
+
+Ollama reste disponible derrière la même interface : `SAW_LLM_BACKEND=ollama`
+avec un `SAW_LLM_MODEL` correspondant.
 
 ## Lancement
 

@@ -41,17 +41,31 @@ class Settings(BaseSettings):
     # derrière `LLMBackend` ; changer de moteur impose de changer aussi
     # `llm_model`, les identifiants de modèles n'étant pas interchangeables.
     llm_backend: str = "lmstudio"
-    llm_model: str = "google/gemma-4-e4b"
+    llm_model: str = "google/gemma-4-31b"
     llm_context_tokens: int = 8192
     llm_temperature_default: float = 0.2
-    # Seuils observables. `load_duration` est la seule grandeur qui atteste
-    # la persistance des poids : le cache KV n'est pas exposé par l'API.
+    # Seuils observables. `load_duration` atteste la persistance des poids
+    # quand le moteur la publie ; sous LM Studio, c'est l'état du modèle qui
+    # fait foi (ADR-014). Le cache KV n'est exposé par aucune des deux API.
     llm_max_load_duration_ms: int = 50
-    llm_max_ttft_ms: int = 2000
+    # ADR-015 : le budget de 2 000 ms de §12.2 est levé, le déversement
+    # CPU/RAM étant assumé. Le seuil ne mesure plus une latence confortable
+    # mais détecte un rechargement de poids : mesuré à 3,6-3,8 s en régime
+    # établi contre plusieurs minutes après un déchargement, 15 s sépare les
+    # deux sans ambiguïté. Un seuil supprimé ne détecterait plus rien.
+    llm_max_ttft_ms: int = 15_000
     code_model_enabled: bool = False
     code_model: str = "qwen/qwen3-coder-next"
     code_model_min_vram_mb: int = 12_288
-    vram_ceiling_mb: int = 9216
+    # ADR-015 : le plafond de 9 216 Mo de §12.1 ne gouverne plus. Le modèle
+    # retenu sature délibérément la VRAM et déverse le reste en RAM ; la
+    # contrainte devient de ne pas provoquer d'éviction ni d'OOM, ce que
+    # `check_llm_latency.py` observe par l'état du modèle. US-006 doit être
+    # respécifiée sur ce critère, et non sur une marge de VRAM.
+    vram_ceiling_mb: int = 10_240
+    # Le déversement est un choix, pas un accident : US-006 ne doit pas le
+    # rapporter comme un dépassement de budget.
+    vram_offload_expected: bool = True
 
     # Ollama — conservé derrière l'interface (ADR-003 point 5).
     ollama_base_url: str = "http://127.0.0.1:11434"
