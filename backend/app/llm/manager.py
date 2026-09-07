@@ -129,6 +129,26 @@ class LLMManager:
                 yield fragment
 
 
+def resolve_backend_factory(name: str) -> type[LLMBackend]:
+    """Classe de backend correspondant à `settings.llm_backend`.
+
+    Les imports sont locaux : charger les deux moteurs à l'import du module
+    ferait dépendre le démarrage de bibliothèques qu'un poste donné n'utilise
+    pas.
+    """
+    if name == "lmstudio":
+        from app.llm.backends.lmstudio import LMStudioBackend
+
+        return LMStudioBackend  # type: ignore[return-value]
+    if name == "ollama":
+        from app.llm.backends.ollama import OllamaBackend
+
+        return OllamaBackend  # type: ignore[return-value]
+    raise ValueError(
+        f"Backend LLM inconnu : « {name} ». Valeurs admises : « lmstudio », « ollama »."
+    )
+
+
 def build_manager(
     backend_factory: type[LLMBackend] | None = None,
 ) -> LLMManager:
@@ -138,10 +158,8 @@ def build_manager(
     elle est refusée avec un message explicite et le service poursuit avec le
     modèle généraliste seul.
     """
-    from app.llm.backends.ollama import OllamaBackend
-
     settings = get_settings()
-    factory = backend_factory or OllamaBackend
+    factory = backend_factory or resolve_backend_factory(settings.llm_backend)
     principal = factory(settings.llm_model)  # type: ignore[call-arg]
 
     code_backend: LLMBackend | None = None

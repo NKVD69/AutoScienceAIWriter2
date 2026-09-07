@@ -33,7 +33,7 @@ class OllamaBackend:
     def __init__(self, model: str | None = None, base_url: str | None = None) -> None:
         settings = get_settings()
         self.model = model or settings.llm_model
-        self.base_url = (base_url or settings.llm_base_url).rstrip("/")
+        self.base_url = (base_url or settings.ollama_base_url).rstrip("/")
         self._client = httpx.AsyncClient(
             base_url=self.base_url,
             timeout=httpx.Timeout(connect=5.0, read=300.0, write=30.0, pool=5.0),

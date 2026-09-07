@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.v1 import router as api_v1_router
 from app.core.config import get_settings
-from app.core.errors import AppError, ModelNotFoundError, OllamaUnavailableError
+from app.core.errors import AppError, BackendUnavailableError, ModelNotFoundError
 from app.core.logging import configure_logging, get_logger
 from app.llm.manager import build_manager
 
@@ -36,7 +36,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.llm = build_manager()
     try:
         await app.state.llm.startup()
-    except (OllamaUnavailableError, ModelNotFoundError) as exc:
+    except (BackendUnavailableError, ModelNotFoundError) as exc:
         logger.warning("Modèle non chargé au démarrage : %s", exc.message)
 
     yield

@@ -38,6 +38,19 @@ python -m venv .venv
 `pyproject.toml` est la source unique des dépendances backend.
 `requirements.txt` n'est pas édité à la main.
 
+## Moteur d'inférence
+
+Le moteur par défaut est **LM Studio** ([ADR-014](docs/adr/ADR-014-backend-lmstudio.md),
+qui amende ADR-003). Le serveur local n'est pas démarré automatiquement :
+
+```bash
+lms server start
+```
+
+Le modèle par défaut est `google/gemma-4-e4b`, seul modèle installé compatible
+avec le budget VRAM de §12.1. Ollama reste disponible derrière la même
+interface : `SAW_LLM_BACKEND=ollama` avec un `SAW_LLM_MODEL` correspondant.
+
 ## Lancement
 
 ```bash
@@ -56,7 +69,7 @@ L'API est liée à la boucle locale et n'est jamais exposée sur le réseau.
 .venv/Scripts/python scripts/check_sqlite_vec.py
 .venv/Scripts/python scripts/check_audit_chain.py
 .venv/Scripts/python scripts/check_no_cloud_calls.py
-.venv/Scripts/python scripts/check_llm_latency.py   # si Ollama disponible
+.venv/Scripts/python scripts/check_llm_latency.py   # si le moteur est joignable
 ```
 
 Un script indisponible faute d'environnement — pas de GPU, pas d'Ollama, pas de
@@ -68,7 +81,7 @@ Quarto — sort en code 2 : ce n'est pas un échec. Un script qui sort en 1 en e
 |---|---|---|
 | US-001 | Backend FastAPI + aiosqlite WAL | livrée |
 | US-002 | Schéma SQLite unique + sqlite-vec | livrée |
-| US-003 | LLM Manager, modèle unique persistant | livrée |
+| US-003 | LLM Manager, modèle unique persistant | livrée (LM Studio + Ollama) |
 | US-701 | Journal d'audit à détection d'altération | livrée |
 | US-005 | Embeddings CPU hors Ollama | à faire |
 | US-101 | CRUD projets, registre, sauvegarde | à faire |

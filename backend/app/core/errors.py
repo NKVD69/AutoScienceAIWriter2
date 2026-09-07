@@ -104,16 +104,19 @@ class DimensionMismatchError(AppError):
         )
 
 
-class OllamaUnavailableError(AppError):
-    """Le démon Ollama ne répond pas.
+class BackendUnavailableError(AppError):
+    """Le moteur d'inférence local ne répond pas.
 
-    ADR-003 : le message porte la remédiation par système d'exploitation.
-    Un « connection refused » brut oblige l'utilisateur à deviner qu'un
-    service doit tourner.
+    ADR-003 : le message porte toujours une remédiation. Un « connection
+    refused » brut oblige l'utilisateur à deviner qu'un service doit tourner.
     """
 
-    code = "OLLAMA_UNAVAILABLE"
+    code = "LLM_BACKEND_UNAVAILABLE"
     status_code = 503
+
+
+class OllamaUnavailableError(BackendUnavailableError):
+    code = "OLLAMA_UNAVAILABLE"
 
     @classmethod
     def actionable(cls, base_url: str, detail: str = "") -> OllamaUnavailableError:
@@ -123,6 +126,22 @@ class OllamaUnavailableError(AppError):
             "« ollama serve » (le service démarre en général automatiquement). "
             "Linux : « curl -fsSL https://ollama.com/install.sh | sh » puis "
             "« systemctl --user start ollama »."
+        )
+        if detail:
+            message = f"{message} Détail : {detail}"
+        return cls(message, base_url=base_url)
+
+
+class LMStudioUnavailableError(BackendUnavailableError):
+    code = "LMSTUDIO_UNAVAILABLE"
+
+    @classmethod
+    def actionable(cls, base_url: str, detail: str = "") -> LMStudioUnavailableError:
+        message = (
+            f"LM Studio est injoignable sur {base_url}. Le serveur local n'est pas "
+            "démarré par défaut : l'activer dans l'onglet « Developer » de "
+            "l'application, ou lancer « lms server start ». Vérification : "
+            "« lms status »."
         )
         if detail:
             message = f"{message} Détail : {detail}"
@@ -141,11 +160,15 @@ class ModelNotFoundError(AppError):
     status_code = 503
 
     @classmethod
-    def with_pull_command(cls, model: str) -> ModelNotFoundError:
+    def with_command(cls, model: str, command: str) -> ModelNotFoundError:
         return cls(
             f"Le modèle « {model} » n'est pas présent localement. "
             f"Le téléchargement relève du consentement model_download et n'est "
-            f"pas déclenché automatiquement. Commande : ollama pull {model}",
+            f"pas déclenché automatiquement. Commande : {command}",
             model=model,
-            pull_command=f"ollama pull {model}",
+            pull_command=command,
         )
+
+    @classmethod
+    def with_pull_command(cls, model: str) -> ModelNotFoundError:
+        return cls.with_command(model, f"ollama pull {model}")

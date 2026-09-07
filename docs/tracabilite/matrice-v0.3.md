@@ -75,6 +75,8 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | FK réellement appliquées | ADR-002 | §4.3 | US-002 | `test_foreign_keys_enforced_on_chunk` |
 | Cascade vectorielle par trigger | ADR-002 | §4.3 | US-002 | `test_cascade_delete_source_removes_vectors` |
 | Modèle LLM unique persistant | ADR-003 | §6.1 | US-003 | `check_llm_latency.py`, `test_load_duration_below_threshold_on_second_request` |
+| Moteur LM Studio derrière `LLMBackend` | **ADR-014** | §6.1 | US-003 | `test_factory_resolves_both_engines`, `test_ttl_sent_on_every_request` |
+| Résidence observée, non inférée | **ADR-014** | §6.2 | US-003 | `test_model_stays_resident_across_requests`, `test_load_duration_is_none_not_zero` |
 | Prompts système stables | ADR-003 | §6.2 | US-003 | `test_system_prompt_byte_stable_across_calls`, `test_prompts_are_module_level_constants` |
 | Option second modèle code | ADR-003 | §6.3 | US-003 | `test_code_model_refused_below_12gb` |
 | Budget VRAM global | ADR-003 | §12.3 | **US-006** | `check_vram_budget.py`, `test_vram_budget` |
@@ -228,3 +230,21 @@ ne les implémente.
 - **Migration `002_audit_chain.sql`** créée hors des listes de fichiers de
   US-002 et US-701, l'index unique de chaînage n'étant rattaché à aucun
   périmètre alors que US-701 l'exige.
+
+---
+
+## 7. Amendement du 7 septembre 2026 — ADR-014
+
+Le moteur d'inférence passe d'Ollama à **LM Studio**, décision consignée dans
+[ADR-014](../adr/ADR-014-backend-lmstudio.md). Les principes d'ADR-003 sont
+inchangés ; seul le moteur qui les applique devient un réglage.
+
+| Élément du dossier | État |
+|---|---|
+| ADR-003 points 2 et 3 (pas de swap par agent, prompts figés) | inchangés, mêmes tests |
+| ADR-003 point 1 (`keep_alive=-1`, `qwen2.5-7b`) | amendé par ADR-014 |
+| ADR-003 point 5 (backend alternatif) | réalisé |
+| Spéc. §6.2 (`load_duration < 50 ms`) | **inapplicable sous LM Studio** — remplacé par l'état du modèle |
+| Spéc. §6.1 (modèle `qwen2.5-7b-instruct-q4_k_m`) | à réécrire : aucun modèle de ce profil n'est installé |
+| Spéc. §13.1 (dépendance `ollama`) | à retirer : la dépendance est déclarée mais inutilisée, les deux backends étant écrits sur `httpx` |
+| ADR-013 (embeddings hors GPU) | **inchangé**, bien que `text-embedding-nomic-embed-text-v1.5` soit installé dans LM Studio |

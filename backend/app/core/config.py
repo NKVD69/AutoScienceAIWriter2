@@ -36,10 +36,12 @@ class Settings(BaseSettings):
     data_dir: Path = Field(default=Path.home() / ".science-ai-writer")
     sqlite_busy_timeout_ms: int = 5000
 
-    # --- LLM (ADR-003) ---------------------------------------------------
-    llm_backend: str = "ollama"
-    llm_base_url: str = "http://127.0.0.1:11434"
-    llm_model: str = "qwen2.5:7b-instruct-q4_K_M"
+    # --- LLM (ADR-003, ADR-014) ------------------------------------------
+    # Moteur d'inférence local : "lmstudio" ou "ollama". Les deux vivent
+    # derrière `LLMBackend` ; changer de moteur impose de changer aussi
+    # `llm_model`, les identifiants de modèles n'étant pas interchangeables.
+    llm_backend: str = "lmstudio"
+    llm_model: str = "google/gemma-4-e4b"
     llm_context_tokens: int = 8192
     llm_temperature_default: float = 0.2
     # Seuils observables. `load_duration` est la seule grandeur qui atteste
@@ -47,9 +49,23 @@ class Settings(BaseSettings):
     llm_max_load_duration_ms: int = 50
     llm_max_ttft_ms: int = 2000
     code_model_enabled: bool = False
-    code_model: str = "qwen2.5-coder:7b"
+    code_model: str = "qwen/qwen3-coder-next"
     code_model_min_vram_mb: int = 12_288
     vram_ceiling_mb: int = 9216
+
+    # Ollama — conservé derrière l'interface (ADR-003 point 5).
+    ollama_base_url: str = "http://127.0.0.1:11434"
+
+    # LM Studio — le serveur local n'est pas démarré par défaut.
+    lmstudio_base_url: str = "http://127.0.0.1:1234"
+    # Analogue de `keep_alive=-1` : LM Studio n'accepte pas de durée infinie,
+    # on demande une durée que le service ne dépassera pas en usage.
+    lmstudio_ttl_seconds: int = 86_400
+
+    @property
+    def llm_base_url(self) -> str:
+        """URL du moteur actif. Un seul réglage à changer pour basculer."""
+        return self.lmstudio_base_url if self.llm_backend == "lmstudio" else self.ollama_base_url
 
     # --- Embeddings (ADR-013) --------------------------------------------
     embedding_model: str = "nomic-ai/nomic-embed-text-v1.5"

@@ -20,6 +20,7 @@ rediscutable pendant l'implémentation : une objection se consigne en section
 | [011](ADR-011-frontend-angular-dockview-signals.md) | Angular, Dockview, Signals | Accepté | — |
 | [012](ADR-012-pas-de-docker-au-mvp.md) | Pas de Docker au MVP | Accepté | — |
 | [013](ADR-013-embeddings-cpu-hors-ollama.md) | Embeddings CPU hors Ollama | Accepté | D-05 |
+| [014](ADR-014-backend-lmstudio.md) | LM Studio comme moteur d'inférence local | Accepté | amende ADR-003 |
 
 Les identifiants `D-xx` renvoient aux défauts relevés dans
 `ANALYSE-CRITIQUE-V0.2.md`.
