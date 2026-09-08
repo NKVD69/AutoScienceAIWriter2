@@ -17,6 +17,7 @@ from app.api.v1 import router as api_v1_router
 from app.core.config import get_settings
 from app.core.errors import AppError, BackendUnavailableError, ModelNotFoundError
 from app.core.logging import configure_logging, get_logger
+from app.db.pool import reset_pool
 from app.llm.manager import build_manager
 
 logger = get_logger(__name__)
@@ -40,6 +41,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.warning("Modèle non chargé au démarrage : %s", exc.message)
 
     yield
+
+    # Les fichiers projet restent ouverts entre deux requêtes (US-101) :
+    # les fermer à l'arrêt évite de laisser des -wal non repliés derrière soi.
+    await reset_pool()
     logger.info("Arrêt du service")
 
 

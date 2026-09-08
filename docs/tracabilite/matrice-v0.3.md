@@ -27,7 +27,7 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 
 | Exigence V3 | Spéc. V0.3 | User story | Priorité | Statut |
 |---|---|---|---|---|
-| Saisie d'un sujet et création de projet | §4.2 | US-101 | P0 | À implémenter |
+| Saisie d'un sujet et création de projet | §4.2 | US-101 | P0 | **Livrée** |
 | Import de PDF et de références | §7.1 | US-102 | P0 | À implémenter |
 | Recherche bibliographique multi-bases | §10 | US-BIBLIO-001 | **P0** | À implémenter |
 | Import DOI / BibTeX / RIS | §10 | US-IMPORT-001 | P1 | À implémenter |
@@ -121,7 +121,7 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | US-004 | Sandbox à deux niveaux | P0 | US-001 | ✅ `PROMPT-US-004.md` | Prêt |
 | **US-005** | Embeddings CPU hors Ollama | P0 | US-002 | ✅ `PROMPT-US-005.md` | Prêt |
 | **US-006** | Budget VRAM en CI | P0 | US-003, US-005 | ✅ `PROMPT-US-006.md` | Prêt |
-| US-101 | CRUD projets | P0 | US-002 | ✅ `PROMPT-US-101.md` | Prêt |
+| US-101 | CRUD projets | P0 | US-002 | ✅ `PROMPT-US-101.md` | **Livrée** |
 | US-102 | Import sources et ingestion RAG | P0 | US-002, US-005 | ✅ `PROMPT-US-102.md` | Prêt |
 | US-BIBLIO-001 | Recherche bibliographique | P0 | US-101 | ✅ `PROMPT-US-BIBLIO-001.md` | Prêt |
 | US-201 | LangGraph + guardrails | P0 | US-003 | ✅ `PROMPT-US-201-202.md` | Prêt |

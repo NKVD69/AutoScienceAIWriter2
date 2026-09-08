@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     # ADR-001 : un fichier .sqlite par projet, rien d'autre.
     data_dir: Path = Field(default=Path.home() / ".science-ai-writer")
     sqlite_busy_timeout_ms: int = 5000
+    # Un projet = un fichier. Au-delà de cette limite, la connexion la moins
+    # récemment utilisée est fermée : garder ouverts des dizaines de fichiers
+    # .sqlite consommerait des descripteurs sans rien accélérer.
+    max_open_projects: int = 5
 
     # --- LLM (ADR-003, ADR-014) ------------------------------------------
     # Moteur d'inférence local : "lmstudio" ou "ollama". Les deux vivent
@@ -102,6 +106,20 @@ class Settings(BaseSettings):
     @property
     def projects_dir(self) -> Path:
         return self.data_dir / "projects"
+
+    @property
+    def registry_path(self) -> Path:
+        """Registre global : quels projets existent, et où sont leurs fichiers."""
+        return self.data_dir / "registry.sqlite"
+
+    @property
+    def trash_dir(self) -> Path:
+        """Un mémoire représente des mois de travail : rien n'est effacé."""
+        return self.data_dir / "trash"
+
+    @property
+    def backups_dir(self) -> Path:
+        return self.data_dir / "backups"
 
 
 @lru_cache(maxsize=1)

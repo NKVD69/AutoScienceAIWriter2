@@ -38,6 +38,35 @@ class ValidationFailedError(AppError):
     status_code = 422
 
 
+class ProjectNotFoundError(NotFoundError):
+    """Projet absent du registre, ou fichier introuvable sur le disque.
+
+    Le second cas est réel : l'utilisateur possède ses fichiers et peut en
+    déplacer un. Le message doit alors proposer une action, pas constater
+    une absence.
+    """
+
+    code = "PROJECT_NOT_FOUND"
+
+    @classmethod
+    def unknown(cls, project_id: int) -> ProjectNotFoundError:
+        return cls(
+            f"Aucun projet d'identifiant {project_id} dans le registre.", project_id=project_id
+        )
+
+    @classmethod
+    def file_missing(cls, project_id: int, db_path: str) -> ProjectNotFoundError:
+        return cls(
+            f"Le registre référence le projet {project_id} en « {db_path} », "
+            "mais ce fichier est absent du disque. Il a probablement été "
+            "déplacé ou supprimé hors de l'application. Le replacer à cet "
+            "emplacement, ou retirer l'entrée du registre par DELETE "
+            f"/api/v1/projects/{project_id}.",
+            project_id=project_id,
+            db_path=db_path,
+        )
+
+
 class ConflictError(AppError):
     """Transition refusée : l'état courant n'autorise pas l'opération.
 
