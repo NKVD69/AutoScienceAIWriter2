@@ -264,7 +264,7 @@ assumé ([ADR-015](../adr/ADR-015-modele-31b-deversement-cpu.md)).
 | US-006 (`check_vram_budget.py`) | **à respécifier** : mesurer l'éviction, non une marge de VRAM |
 | ADR-013 (embeddings CPU) | **tension nouvelle** : 4,2 Go de RAM libres seulement, les embeddings CPU et le modèle se disputent la même ressource |
 | US-102 (ingestion, 500 chunks < 180 s) | budget établi sans modèle de 34 Go en mémoire — à revérifier |
-| US-801, US-DASH-001 | une section demande ~55 min : le suivi de progression et la reprise deviennent structurants, non décoratifs |
+| US-801, US-DASH-001 | une section demande ~15 min et un plan 24 min (mesurés) : le suivi de progression et la reprise deviennent structurants, non décoratifs |
 
 Points d'ADR-003 **inchangés** : modèle unique résident, aucun swap par agent,
 prompts système figés, second modèle de code refusé sous 12 Go de VRAM.

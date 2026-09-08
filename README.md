@@ -58,12 +58,14 @@ Ce que cela implique concrètement :
 |---|---|
 | VRAM occupée | 9 713 / 10 240 Mo |
 | RAM occupée | 59,7 / 63,9 Go |
-| Débit | ~0,6 token/s |
-| Section de 1 500 mots | ~55 minutes |
+| Débit de génération | ~2,3 tokens/s |
+| Section de 1 500 mots | ~15 minutes |
+| Plan complet (spike 02) | 24 minutes |
 
 La qualité du modèle prime sur le temps de génération : un mémoire se rédige
-sur des semaines. Les budgets de latence de §12.2 sont levés en conséquence,
-et `llm_max_ttft_ms` ne sert plus qu'à détecter un rechargement de poids.
+sur des semaines. Les budgets de latence de §12.2 sont levés en conséquence.
+Le rechargement des poids se détecte par l'**état de résidence** du modèle, non
+par une durée : `llm_max_ttft_ms` n'est qu'un plafond de sécurité.
 
 Ollama reste disponible derrière la même interface : `SAW_LLM_BACKEND=ollama`
 avec un `SAW_LLM_MODEL` correspondant.

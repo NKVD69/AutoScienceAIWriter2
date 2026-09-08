@@ -49,11 +49,22 @@ class Settings(BaseSettings):
     # fait foi (ADR-014). Le cache KV n'est exposé par aucune des deux API.
     llm_max_load_duration_ms: int = 50
     # ADR-015 : le budget de 2 000 ms de §12.2 est levé, le déversement
-    # CPU/RAM étant assumé. Le seuil ne mesure plus une latence confortable
-    # mais détecte un rechargement de poids : mesuré à 3,6-3,8 s en régime
-    # établi contre plusieurs minutes après un déchargement, 15 s sépare les
-    # deux sans ambiguïté. Un seuil supprimé ne détecterait plus rien.
-    llm_max_ttft_ms: int = 15_000
+    # CPU/RAM étant assumé.
+    #
+    # Le temps au premier token ne détecte PAS un rechargement de poids, et
+    # un seuil de 15 s a été essayé avant d'être écarté sur mesure : il est
+    # dominé par le traitement du prompt, qui croît avec le contexte. Mesuré
+    # à 3,7 s sur une invite de quelques dizaines de tokens et à 13,5 s sur
+    # 700 tokens, soit ~52 tokens/s d'amorce : à 8 192 tokens de contexte,
+    # l'ordre de grandeur attendu est de 160 s. Un seuil serré se
+    # déclencherait donc en régime parfaitement sain, et un seuil large
+    # recouvrirait le coût d'un rechargement. Les deux grandeurs ne se
+    # séparent pas.
+    #
+    # Le détecteur de rechargement est ailleurs et il est fiable : l'état de
+    # résidence du modèle (ADR-014). Ce seuil ne garde qu'un rôle de
+    # plafond contre un état pathologique — thrashing, disque saturé.
+    llm_max_ttft_ms: int = 300_000
     code_model_enabled: bool = False
     code_model: str = "qwen/qwen3-coder-next"
     code_model_min_vram_mb: int = 12_288

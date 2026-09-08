@@ -523,14 +523,16 @@ Porte de sortie si la RAM devient bloquante : `google/gemma-4-31b-qat` (Q4_0), i
 |---|---|---|
 | Modèle résident avant et après une série | vrai | critère de persistance (§6.2) |
 | `load_duration` après première requête | < 50 ms *si le moteur le publie* | détecteur de rechargement |
-| Temps au premier token | < 15 s | détecteur de rechargement, **non un confort** |
+| Temps au premier token | < 300 s | plafond contre un état pathologique, **ni confort ni détecteur** |
 | Recherche KNN, 50 000 chunks | < 200 ms | budget réel |
 | Ingestion, 500 chunks de 512 tokens | < 180 s (CPU 8 cœurs) | budget réel, **à revérifier** (§12.1) |
 | Export PDF, 150 pages | < 90 s | budget réel |
 
-Le seuil de 15 s pour le premier token n'est pas une cible d'expérience : il sépare le régime établi (3,6 à 3,8 s mesurés) d'un rechargement de poids (plusieurs minutes). Le supprimer ne détecterait plus rien.
+Le temps au premier token **ne détecte pas un rechargement de poids** : il est dominé par le traitement du prompt, qui croît avec le contexte — 3,7 s sur une invite courte, 13,5 s sur 700 tokens, de l'ordre de 160 s attendues à 8 192 tokens. Un seuil serré se déclencherait en régime sain, un seuil large recouvrirait le coût d'un rechargement : les deux grandeurs ne se séparent pas. Le détecteur de rechargement est la **résidence du modèle** (§6.2) ; ce seuil n'est qu'un plafond.
 
-**Ordre de grandeur à connaître.** À 0,6 token/s, une section de 1 500 mots demande environ 55 minutes, et un mémoire de quarante sections de l'ordre de 36 heures de génération cumulée. Conséquence d'interface, non de performance : l'attente synchrone est exclue, le suivi de progression et la reprise après arrêt deviennent structurants (§2, pont SSE).
+**Ordre de grandeur à connaître.** À 2,3 tokens/s — débit mesuré sur une génération complète — une section de 1 500 mots demande environ 15 minutes, un plan complet environ 25 minutes, et un mémoire de quarante sections de l'ordre de 10 heures de génération cumulée. Conséquence d'interface, non de performance : l'attente synchrone est exclue, le suivi de progression et la reprise après arrêt deviennent structurants (§2, pont SSE).
+
+> Le débit apparent de 0,6 token/s que rapporte `check_llm_latency.py` n'est **pas extrapolable** : sur un budget de 24 tokens, le temps d'amorce du prompt écrase le débit. Les deux mesures sont exactes ; seule leur confusion est fautive.
 
 ### 12.3 Vérification continue `[NOUVEAU — D-10]`
 

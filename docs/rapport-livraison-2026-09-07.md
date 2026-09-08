@@ -189,7 +189,13 @@ Renverse une option explicitement écartée par ADR-003 (« Modèle 30B quantifi
 entièrement en VRAM — ne tient pas : `llama.cpp` répartit les couches.
 
 Mesures fondant la décision : VRAM 9 713 / 10 240 Mo · RAM 59,7 / 63,9 Go ·
-0,6 token/s · TTFT 3,6 à 3,8 s · une section de 1 500 mots en ~55 minutes.
+**2,3 tokens/s** en génération complète · une section de 1 500 mots en
+~15 minutes, un plan complet en 24 minutes (spike 02).
+
+Le débit de 0,6 token/s rapporté par `check_llm_latency.py` n'est pas
+extrapolable : sur un budget de 24 tokens, le temps d'amorce du prompt écrase
+le débit. Une première rédaction d'ADR-015 en tirait 55 minutes par section et
+36 heures par mémoire ; la correction est consignée dans l'ADR.
 
 ### Réserves nouvelles
 

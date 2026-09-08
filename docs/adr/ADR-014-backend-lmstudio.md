@@ -92,16 +92,15 @@ peut ne pas la publier.
 d'ADR-003 (~5,2 Go). `google/gemma-4-e4b` est retenu par défaut comme le seul
 compatible avec le budget VRAM de §12.1.
 
-`google/gemma-4-31b` a été mesuré par `check_llm_latency.py` le 7 septembre
-2026 : **0,6 token/s**, temps au premier token de **3,6 à 3,8 s** contre un
-seuil de 2 s (§12.2). Le script sort en code 1 sur ce modèle tout en
-constatant la résidence — la distinction est le résultat utile : le moteur
-tient sa part du contrat, le modèle ne tient pas le budget de latence. Ses
-33,8 Go sur une carte de 10 Go l'exécutent majoritairement hors GPU. Il n'est
-pas utilisable comme modèle de rédaction.
+`google/gemma-4-31b` a d'abord été mesuré par `check_llm_latency.py` — sur un
+budget de 24 tokens, donc un débit apparent de 0,6 token/s et un temps au
+premier token de 3,6 à 3,8 s — ce qui plaçait le modèle hors du budget de 2 s
+de §12.2 et faisait sortir le script en code 1.
 
-Le modèle par défaut `google/gemma-4-e4b` n'a pas encore été mesuré : le
-charger aurait évincé le modèle de la session en cours sur le poste.
+**Cette réserve est levée** : ADR-015 a retenu ce modèle et supprimé le budget
+de latence, et le spike 02 a mesuré le débit réel sur une génération complète
+à **2,3 tokens/s**. Le chiffre de 0,6 n'était pas faux, il n'était pas
+extrapolable : sur 24 tokens, le temps d'amorce du prompt écrase le débit.
 
 ## Vérification
 

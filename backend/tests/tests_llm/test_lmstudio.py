@@ -112,13 +112,18 @@ def test_default_model_is_documented() -> None:
     assert settings.vram_offload_expected is True
 
 
-def test_latency_threshold_detects_reload_not_discomfort() -> None:
-    """ADR-015 point 5 : le seuil separe le regime etabli (3,6-3,8 s mesures)
-    d'un rechargement de poids (plusieurs minutes)."""
+def test_ttft_threshold_is_a_ceiling_not_a_reload_detector() -> None:
+    """ADR-015 point 5, corrige sur mesure.
+
+    Le temps au premier token est domine par le traitement du prompt : 13,5 s
+    pour 700 tokens, soit ~160 s attendues a 8 192 tokens de contexte. Un
+    seuil serre se declencherait donc en regime parfaitement sain. Le
+    detecteur de rechargement est l'etat de residence (ADR-014), pas cette
+    duree.
+    """
     settings = get_settings()
-    assert settings.llm_max_ttft_ms > 4_000, "un seuil sous le regime etabli echouerait en continu"
-    assert settings.llm_max_ttft_ms < 60_000, (
-        "un seuil trop haut ne detecterait plus un rechargement"
+    assert settings.llm_max_ttft_ms >= 200_000, (
+        "un seuil sous le temps d'amorce a contexte plein echouerait en regime sain"
     )
 
 
