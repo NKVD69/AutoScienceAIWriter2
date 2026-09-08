@@ -35,7 +35,7 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | Base de connaissances vectorielle | §4.3, §7 | US-002, US-102 | P0 | **Livrée** |
 | Filtres avancés du RAG | §7.2, §7.3 | US-RAG-002 | P1 | À implémenter |
 | Génération de problématique et de plan | §5.2 | **US-PLAN-001** | **P0** | À implémenter |
-| Édition et validation du plan | §5.2 | US-PLAN-001 | P0 | À implémenter |
+| Édition et validation du plan | §5.2 | US-PLAN-001 | P0 | **Livrée** |
 | Rédaction de section sourcée | §5.4, §5.5 | US-301 | P1 | À implémenter |
 | Relecture et score de qualité | §5.4 | US-302 | P1 | À implémenter |
 | Distinction fait sourcé / hypothèse | §5.5 | US-301, US-302 | P1 | À implémenter |
@@ -126,7 +126,7 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | US-BIBLIO-001 | Recherche bibliographique | P0 | US-101 | ✅ `PROMPT-US-BIBLIO-001.md` | Prêt |
 | US-201 | LangGraph + guardrails | P0 | US-003 | ✅ `PROMPT-US-201-202.md` | **Livrée** |
 | US-202 | Circuit breaker | P0 | US-201 | ✅ `PROMPT-US-201-202.md` | **Livrée** |
-| **US-PLAN-001** | Plan : génération, édition, validation | P0 | US-003, US-201 | ✅ `PROMPT-US-PLAN-001.md` | Prêt |
+| **US-PLAN-001** | Plan : génération, édition, validation | P0 | US-003, US-201 | ✅ `PROMPT-US-PLAN-001.md` | **Livrée** |
 | US-301 | Rédaction de section | P1 | US-PLAN-001, US-102 | ✅ `PROMPT-US-301.md` | Prêt |
 | US-302 | Relecture et score | P1 | US-301 | ✅ `PROMPT-US-302.md` | Prêt |
 | US-401 | Exécution de script | P1 | US-004 | ✅ `PROMPT-US-401.md` | Prêt |

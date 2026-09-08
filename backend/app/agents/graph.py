@@ -84,3 +84,34 @@ def next_states(depuis: WorkflowState) -> frozenset[WorkflowState]:
 def describe_graph() -> dict[str, list[str]]:
     """Table lisible, pour le tableau de bord et les tests."""
     return {depuis.value: sorted(c.value for c in cibles) for depuis, cibles in TRANSITIONS.items()}
+
+
+# --- Nœuds du plan (US-PLAN-001) -----------------------------------------
+
+# Sous-graphe du plan, extrait de la table pour être vérifiable seul. Il
+# n'ajoute aucune arête : il nomme celles qui existent déjà, et un test
+# compare les deux — un sous-graphe qui inventerait une transition
+# contournerait le refus du graphe principal.
+PLAN_SUBGRAPH: dict[WorkflowState, frozenset[WorkflowState]] = {
+    WorkflowState.PLAN_DRAFTING: frozenset({WorkflowState.PLAN_GUARDRAIL}),
+    WorkflowState.PLAN_GUARDRAIL: frozenset(
+        {WorkflowState.PLAN_REVIEW, WorkflowState.PLAN_DRAFTING, WorkflowState.ERROR_STATE}
+    ),
+    WorkflowState.PLAN_REVIEW: frozenset({WorkflowState.PLAN_VALIDATED}),
+    WorkflowState.PLAN_VALIDATED: frozenset({WorkflowState.SECTION_DRAFTING}),
+}
+
+
+def plan_guardrail_target(ok: bool, breaker_tripped: bool) -> WorkflowState:
+    """Cible après le guardrail du plan.
+
+    Trois issues seulement, et aucune ne mène à `PLAN_VALIDATED` : la porte
+    humaine reste entière quelle que soit la qualité du plan produit.
+    """
+    if ok:
+        return WorkflowState.PLAN_REVIEW
+    if breaker_tripped:
+        return WorkflowState.ERROR_STATE
+    # Le MÊME agent est relancé : une erreur de format n'est pas un
+    # problème de fond, le relecteur n'a rien à y faire.
+    return WorkflowState.PLAN_DRAFTING

@@ -31,16 +31,16 @@ def migrations_copy(tmp_path: Path) -> Path:
 async def test_discover_is_ordered(migrations_copy: Path) -> None:
     """L'ordre est numerique, pas lexicographique : 010 vient apres 002."""
     (migrations_copy / "010_dix.sql").write_text("SELECT 1;", encoding="utf-8")
-    (migrations_copy / "004_quatre.sql").write_text("SELECT 1;", encoding="utf-8")
+    (migrations_copy / "005_cinq.sql").write_text("SELECT 1;", encoding="utf-8")
     versions = [v for v, _ in discover(migrations_copy)]
     assert versions == sorted(versions)
-    assert versions == [1, 2, 3, 4, 10]
+    assert versions == [1, 2, 3, 4, 5, 10]
 
 
 async def test_migrations_apply_schema(project_db: Path) -> None:
     async with connect(project_db) as conn:
         applied = await run_migrations(conn)
-        assert applied == [1, 2, 3]
+        assert applied == [1, 2, 3, 4]
         async with conn.execute(
             "SELECT name FROM sqlite_master WHERE type IN ('table','trigger')"
         ) as cur:
@@ -75,14 +75,28 @@ async def test_migration_003_adds_section_kind(project_db: Path) -> None:
     assert colonnes["section_kind"] == ("TEXT", "'body'")
 
 
+async def test_migration_004_lets_a_section_survive_its_node(project_db: Path) -> None:
+    """US-PLAN-001 : supprimer silencieusement un texte redige serait
+    detruire du travail. La cle etrangere d'origine le faisait."""
+    async with connect(project_db) as conn:
+        await run_migrations(conn)
+        async with conn.execute("PRAGMA foreign_key_list(draft_section)") as cur:
+            cles = {str(r[3]): str(r[6]) for r in await cur.fetchall()}
+        async with conn.execute("PRAGMA table_info(draft_section)") as cur:
+            nullable = {str(r[1]): int(r[3]) for r in await cur.fetchall()}
+
+    assert cles.get("plan_node_id") == "SET NULL", "la cascade détruirait la section"
+    assert nullable["plan_node_id"] == 0, "une section orpheline n'a plus de nœud"
+
+
 async def test_migrations_idempotent(project_db: Path) -> None:
     async with connect(project_db) as conn:
         first = await run_migrations(conn)
         second = await run_migrations(conn)
         versions = await applied_versions(conn)
-    assert first == [1, 2, 3]
+    assert first == [1, 2, 3, 4]
     assert second == []
-    assert set(versions) == {1, 2, 3}
+    assert set(versions) == {1, 2, 3, 4}
 
 
 async def test_migrations_detect_modified_file(project_db: Path, migrations_copy: Path) -> None:

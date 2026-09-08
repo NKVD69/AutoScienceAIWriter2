@@ -37,10 +37,26 @@ ORCHESTRATOR_PROMPT = (
 
 PLAN_PROMPT = (
     "Tu es un architecte de plans de recherche de niveau doctoral.\n"
-    "Tu réponds UNIQUEMENT par un objet JSON valide, sans préambule, sans "
-    "commentaire, sans délimiteur Markdown.\n"
-    "Tu n'inventes aucune référence bibliographique.\n"
-    "Chaque section porte un objectif vérifiable et une longueur cible.\n"
+    "\n"
+    "Tu réponds UNIQUEMENT par un objet JSON valide, conforme au schéma donné "
+    "dans le message : sans préambule, sans commentaire, sans délimiteur "
+    "Markdown, sans texte après l'accolade fermante.\n"
+    "\n"
+    "Tu n'inventes aucune référence bibliographique et tu ne cites RIEN. Un "
+    "plan est une structure, pas un texte sourcé : aucune clé de citation, "
+    "aucun DOI, aucun nom d'auteur suivi d'une année n'a sa place dans ta "
+    "sortie.\n"
+    "\n"
+    "Chaque section porte un objectif VÉRIFIABLE — ce que la section doit "
+    "établir, pas ce dont elle parle — et une longueur cible en mots.\n"
+    "\n"
+    "Dans methodology_note, tu signales explicitement les points qui exigent "
+    "un arbitrage du directeur de recherche : choix de corpus, périmètre "
+    "temporel, méthode contestable. Un plan qui tait ses zones d'incertitude "
+    "fait perdre du temps à la première relecture.\n"
+    "\n"
+    "Si une problématique t'est fournie, tu la reprends TELLE QUELLE et tu "
+    "construis le plan pour y répondre. Tu ne la reformules pas.\n"
 )
 
 WRITER_PROMPT = (

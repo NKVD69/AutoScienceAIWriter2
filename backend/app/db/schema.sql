@@ -81,9 +81,12 @@ CREATE TABLE plan_node (
   target_words INTEGER
 );
 
+-- `plan_node_id` est NULLABLE et en SET NULL (migration 004) : une section
+-- rédigée survit à la suppression de son nœud, marquée ORPHANED. La
+-- supprimer avec le nœud détruirait des jours de travail sans le dire.
 CREATE TABLE draft_section (
   id            INTEGER PRIMARY KEY,
-  plan_node_id  INTEGER NOT NULL REFERENCES plan_node(id) ON DELETE CASCADE,
+  plan_node_id  INTEGER REFERENCES plan_node(id) ON DELETE SET NULL,
   content_qmd   TEXT NOT NULL DEFAULT '',
   status        TEXT NOT NULL,
   quality_score REAL,
@@ -191,3 +194,4 @@ CREATE INDEX idx_audit_project    ON audit_log(project_id, id);
 -- incoherence decouverte des mois plus tard.
 CREATE UNIQUE INDEX idx_audit_prev ON audit_log(project_id, prev_hash);
 CREATE INDEX idx_chunk_section ON chunk(source_id, section_kind);
+CREATE INDEX idx_draft_status ON draft_section(status);
