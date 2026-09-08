@@ -22,6 +22,7 @@ rediscutable pendant l'implémentation : une objection se consigne en section
 | [013](ADR-013-embeddings-cpu-hors-ollama.md) | Embeddings CPU hors Ollama | Accepté | D-05 |
 | [014](ADR-014-backend-lmstudio.md) | LM Studio comme moteur d'inférence local | Accepté | amende ADR-003 |
 | [015](ADR-015-modele-31b-deversement-cpu.md) | Modèle 31B, déversement CPU/RAM assumé | Accepté | amende ADR-003 |
+| [016](ADR-016-serialisation-redaction-ingestion.md) | Rédaction et ingestion sérialisées sur le CPU | Accepté | résout ADR-013 × ADR-015 |
 
 Les identifiants `D-xx` renvoient aux défauts relevés dans
 `ANALYSE-CRITIQUE-V0.2.md`.

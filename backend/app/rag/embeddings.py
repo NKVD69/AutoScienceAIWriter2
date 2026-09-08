@@ -24,6 +24,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Protocol
 
+from app.core.compute import INGESTION, ComputeArbiter, get_arbiter
 from app.core.config import get_settings
 from app.core.errors import ModelDownloadConsentRequiredError
 from app.core.logging import get_logger
@@ -139,6 +140,7 @@ class EmbeddingService:
         max_workers: int | None = None,
         cache_dir: Path | None = None,
         backend: EmbeddingBackend | None = None,
+        arbiter: ComputeArbiter | None = None,
     ) -> None:
         settings = get_settings()
         self._model_name = model_name or settings.embedding_model
@@ -150,6 +152,8 @@ class EmbeddingService:
         self._cache_dir = Path(cache_dir or settings.embedding_cache_dir)
         self._backend = backend
         self._load_lock = asyncio.Lock()
+        # ADR-016 : jamais en même temps qu'une génération.
+        self._arbiter = arbiter or get_arbiter()
 
     # --- Métadonnées -----------------------------------------------------
 
@@ -224,7 +228,10 @@ class EmbeddingService:
         total = len(prefixes)
         for debut in range(0, total, self._batch_size):
             lot = prefixes[debut : debut + self._batch_size]
-            calcules = await asyncio.to_thread(backend.encode, lot)
+            # Réservation PAR LOT, non pour toute l'ingestion : une demande
+            # de rédaction n'attend ainsi qu'un lot, pas les mille chunks.
+            async with self._arbiter.reserve(INGESTION):
+                calcules = await asyncio.to_thread(backend.encode, lot)
             self._check_dimensions(calcules)
             vecteurs.extend(calcules)
             if on_progress is not None:
@@ -235,7 +242,8 @@ class EmbeddingService:
         """Vectorise une requête, préfixe `search_query:`."""
         backend = await self._ensure_backend()
         prefixe = self._apply_prefix(text, "query")
-        calcules = await asyncio.to_thread(backend.encode, [prefixe])
+        async with self._arbiter.reserve(INGESTION):
+            calcules = await asyncio.to_thread(backend.encode, [prefixe])
         self._check_dimensions(calcules)
         return calcules[0]
 

@@ -16,9 +16,9 @@ Deux erreurs déjà commises dans ce projet et évitées ici :
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import AsyncIterator
 
+from app.core.compute import GENERATION, ComputeArbiter, get_arbiter
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.llm.base import BackendHealth, LLMBackend, LLMResult
@@ -35,12 +35,15 @@ class LLMManager:
         self,
         backend: LLMBackend,
         code_backend: LLMBackend | None = None,
+        arbiter: ComputeArbiter | None = None,
     ) -> None:
         self._backend = backend
         self._code_backend = code_backend
-        # Le modèle est unique : deux générations simultanées se disputeraient
-        # le contexte et dégraderaient la latence des deux sans rien gagner.
-        self._lock = asyncio.Lock()
+        # L'arbitre remplit deux rôles à la fois (ADR-016) : le modèle est
+        # unique, donc deux générations simultanées se disputeraient son
+        # contexte ; et la génération déverse sur le CPU, qu'elle ne doit pas
+        # disputer à l'ingestion.
+        self._arbiter = arbiter or get_arbiter()
         self._started = False
 
     # --- Cycle de vie ----------------------------------------------------
@@ -85,7 +88,7 @@ class LLMManager:
         settings = get_settings()
         system = get_system_prompt(agent)
         backend = self.backend_for(agent)
-        async with self._lock:
+        async with self._arbiter.reserve(GENERATION):
             result = await backend.generate(
                 system,
                 user,
@@ -95,8 +98,11 @@ class LLMManager:
                 ),
                 stop=stop,
             )
+        # Les durées valent `None` quand le moteur ne les publie pas
+        # (ADR-014) : un format `%.1f` lèverait ici, sur un chemin de
+        # journalisation, ce qui ferait échouer une génération réussie.
         logger.debug(
-            "agent=%s prompt=%s load=%.1fms eval=%.1fms",
+            "agent=%s prompt=%s load=%s eval=%s",
             agent.value,
             prompt_version(agent),
             result.load_duration_ms,
@@ -116,7 +122,7 @@ class LLMManager:
         settings = get_settings()
         system = get_system_prompt(agent)
         backend = self.backend_for(agent)
-        async with self._lock:
+        async with self._arbiter.reserve(GENERATION):
             async for fragment in backend.stream(
                 system,
                 user,
