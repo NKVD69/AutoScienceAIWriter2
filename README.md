@@ -111,7 +111,10 @@ Chemin critique complet et ordre de traitement : [`docs/plan-execution.md`](docs
 ## Spikes de dérisquage
 
 Résultats et méthode dans [`spikes/RESULTATS.md`](spikes/RESULTATS.md).
-Le spike 01 (sqlite-vec) est conforme sous Linux **et** sous Windows.
+Le spike 01 (sqlite-vec) est conforme sous Linux **et** sous Windows. Le
+spike 02 — le décisif — est exécuté : 4/4 hypothèses conformes, sept
+générations de plan sur sept valides au premier essai. Son seuil de 95 %
+reste non certifié, sept essais ne garantissant que 65 %.
 L'addendum du 7 septembre 2026 consigne trois constats d'environnement
 mesurés sur le poste cible, dont un chargement de modèle à froid de
 7 min 44 s qui rend la persistance d'ADR-003 indispensable et non

@@ -21,6 +21,14 @@ machine réelle. Voir `spikes/README.md`.
 tenue, une décision écrite : ADR amendé ou ADR rouvert. Aucune story n'est
 engagée avant.
 
+**État au 8 septembre 2026.** Spike 01 conforme sous Linux et sous Windows.
+Spike 02 exécuté : 4/4 hypothèses conformes sur sept générations, aucune
+n'ayant demandé de reprise — ADR-008 n'est pas rouvert. Son seuil de 95 %
+reste toutefois non certifié : sept essais sans échec ne garantissent que
+65 %, et la certification demande 59 générations, soit une vingtaine
+d'heures. Spikes 03 et 04 toujours partiels, faute d'environnement.
+Voir `spikes/RESULTATS.md`.
+
 Le spike 01 a déjà été exécuté sous Linux : conforme sur dix critères, D-01
 confirmé empiriquement. Reste Windows, où le support des extensions SQLite
 dépend de la provenance de l'interpréteur Python.

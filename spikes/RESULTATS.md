@@ -3,7 +3,7 @@
 | Spike | Objet | Verdict | Où |
 |---|---|---|---|
 | 01 | sqlite-vec : intégrité et performance | **Conforme, 10/10** | Linux · Python 3.12 · SQLite 3.45 |
-| 02 | Sortie structurée d'un 7B local | **Non mesuré** — instrument validé | À exécuter sur la machine cible |
+| 02 | Sortie structurée d'un 7B local | **Mesuré le 8 sept. 2026** — 4/4, voir plus bas | LM Studio · gemma-4-31b |
 | 03 | Pyodide : isolation et paquets | **Partiel** — deux constats bloquants | Linux · node 22 · sans accès CDN |
 | 04 | Quarto : document long | **Partiel** — DOCX et HTML conformes, PDF non mesurable | Linux · Quarto 1.8.25 · TeX Live incomplet |
 
@@ -189,3 +189,92 @@ d'Ollama. À prendre en compte dans US-006.
 | Spike 02 en entier | `ollama pull qwen2.5:7b-instruct-q4_K_M`, délai du script porté au-delà de 600 s, GPU dégagé |
 | Spike 03 | distribution Pyodide vendorisée complète |
 | Spike 04 | Quarto + TinyTeX installés sur le poste |
+
+---
+
+# Spike 02 — exécuté le 8 septembre 2026
+
+**Verdict : 4/4 hypothèses conformes.** Mais le nombre d'essais ne permet pas
+de certifier le seuil d'ADR-008, et l'une des hypothèses n'est pas discriminée.
+Les deux points sont détaillés plus bas ; les lire avant de conclure.
+
+Poste : Windows 11 · LM Studio · `google/gemma-4-31b` Q8_0 résident ·
+déversement CPU/RAM assumé (ADR-015).
+
+## Résultats bruts
+
+| Mode | n | 1er essai | 3 essais | Essais moyens | Durée par génération |
+|---|---|---|---|---|---|
+| prompt seul | 3 | **100 %** | 100 % | 1,00 | 1 150 à 1 381 s |
+| schéma JSON contraint | 3 | **100 %** | 100 % | 1,00 | 1 217 à 1 351 s |
+| *(essai isolé préalable, mode contraint)* | 1 | 100 % | 100 % | 1,00 | 1 453 s |
+
+Débit stable à **2,3 tokens/s** dans les deux modes. Temps au premier token
+p95 : 9,3 s en mode contraint, 9,7 s sans contrainte.
+
+Sept générations, sept `PlanTree` conformes au premier essai — validateurs
+Pydantic personnalisés compris : unicité des titres frères, profondeur
+minimale, bornes de `target_words`.
+
+## Ce qui est établi
+
+**Le harnais fonctionne et son instrument est vérifié.** `spike_02_selftest.py`
+classe 14 cas sur 14. Un échec observé serait imputable au modèle.
+
+**Le modèle produit du JSON conforme au schéma, sans contrainte de décodage.**
+C'est le résultat qui compte pour ADR-004 et ADR-008 : la machine à états n'a
+pas besoin d'une grammaire contrainte pour fonctionner, et le circuit breaker à
+trois essais n'a jamais eu à s'armer.
+
+**La grammaire contrainte est disponible en secours.** LM Studio impose
+`response_format: {"type": "json_schema"}` — il refuse le `json_object`
+d'OpenAI — et accepte le schéma **récursif** de `PlanNode`. La porte de sortie
+qu'envisageait ADR-008 (« grammaire contrainte plutôt qu'ajuster les prompts »)
+est donc utilisable immédiatement, sans changer de moteur.
+
+## Ce qui n'est PAS établi — à lire avant de citer ce spike
+
+**Le seuil de 95 % d'ADR-008 n'est pas certifié.** Sept essais sans échec
+placent le taux de succès à **≥ 65 % avec 95 % de confiance**, pas à 95 %.
+L'écart n'est pas une nuance : c'est la différence entre « le circuit breaker
+ne s'arme jamais » et « il s'arme une fois sur trois ».
+
+| Essais sans échec | Taux de succès garanti (confiance 95 %) |
+|---|---|
+| 3 | ≥ 37 % |
+| 7 | ≥ 65 % |
+| **59** | **≥ 95 %** |
+
+Certifier le seuil demande **59 générations sans échec**, soit environ **20 h**
+sur un mode, 39 h sur les deux, à 20 minutes par génération. C'est un coût
+d'exécution, pas un obstacle technique : la campagne peut tourner sans
+surveillance.
+
+**H2.5 n'est pas discriminée.** Le verdict « le mode JSON améliore le 1er
+essai » est validé par une égalité — 100 % contre 100 % — et non par une
+amélioration. Le mode contraint ne peut pas améliorer un taux déjà parfait.
+L'hypothèse n'est ni confirmée ni infirmée : elle n'est pas testable tant que
+le mode non contraint ne produit pas d'échec. Le comparatif ne redeviendra
+informatif que sur un modèle plus faible, ou sur un schéma plus exigeant.
+
+## Conséquences pour le dossier
+
+| Décision | Effet |
+|---|---|
+| ADR-008 (guardrails, circuit breaker) | **Non rouvert.** Sa prémisse n'est pas démentie ; son seuil reste à certifier |
+| ADR-004 (LangGraph déterministe) | Confortée : les sorties d'agent sont exploitables sans repli |
+| ADR-003 / ADR-015 (modèle unique persistant) | H2.2 conforme — le modèle est resté résident sur toute la série |
+
+**Ce que le spike coûte en usage réel.** Un plan complet demande environ
+20 minutes de génération. Trois essais de circuit breaker en coûteraient une
+heure. Ce n'est pas un tapis roulant tant que le premier essai passe — ce que
+sept essais sur sept suggèrent sans le démontrer.
+
+## Reste à mesurer
+
+| Mesure | Commande |
+|---|---|
+| Certification du seuil de 95 % | `python spike_02_structured_output.py --n 59 --modes json` (~20 h) |
+| Comparatif H2.5 sur un modèle plus faible | `--model google/gemma-4-e4b --n 20` |
+| Spike 03 (Pyodide vendorisé) | distribution complète requise |
+| Spike 04 (compilation PDF) | Quarto + TinyTeX à installer |

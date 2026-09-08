@@ -268,3 +268,18 @@ assumé ([ADR-015](../adr/ADR-015-modele-31b-deversement-cpu.md)).
 
 Points d'ADR-003 **inchangés** : modèle unique résident, aucun swap par agent,
 prompts système figés, second modèle de code refusé sous 12 Go de VRAM.
+
+---
+
+## 9. Spike 02 — mesuré le 8 septembre 2026
+
+| Décision | Effet du spike |
+|---|---|
+| ADR-008 (guardrails, circuit breaker) | **Non rouvert** — 7 générations sur 7 conformes au premier essai, validateurs Pydantic personnalisés compris. Son seuil de 95 % reste **non certifié** : 7 essais sans échec ne garantissent que 65 % de succès à 95 % de confiance, et la certification demande 59 générations (~20 h) |
+| ADR-004 (LangGraph déterministe) | Confortée — les sorties d'agent sont exploitables sans repli |
+| ADR-003, ADR-015 (modèle persistant) | H2.2 conforme — le modèle est resté résident sur toute la série |
+| H2.5 (le mode contraint améliore le taux) | **Non discriminée** — validée par une égalité 100 % / 100 %, non par une amélioration. Non testable tant que le mode libre ne produit pas d'échec |
+
+La contrainte par schéma JSON est disponible sous LM Studio, schéma récursif
+compris : la porte de sortie qu'ADR-008 envisageait est utilisable sans
+changer de moteur.
