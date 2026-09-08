@@ -70,6 +70,31 @@ par une durée : `llm_max_ttft_ms` n'est qu'un plafond de sécurité.
 Ollama reste disponible derrière la même interface : `SAW_LLM_BACKEND=ollama`
 avec un `SAW_LLM_MODEL` correspondant.
 
+## Garde-fous de véracité
+
+Une citation inventée dans un mémoire de doctorat détruit la crédibilité du
+travail et celle de l'outil. Trois contrôles s'appliquent à chaque section
+produite, **avant** toute écriture en base ([§5.5](docs/specs/specifications-techniques-v0.3.md),
+[ADR-008](docs/adr/ADR-008-guardrails-circuit-breaker.md)) :
+
+| | Contrôle | Rejet |
+|---|---|---|
+| **V1** | Toute clé de citation, déclarée ou écrite `@clef` dans le texte, figure dans la liste close dérivée des extraits fournis | clé inconnue |
+| **V2** | Toute affirmation présentée comme sourcée et portant un chiffre significatif désigne l'extrait qui l'établit | chiffre non rattaché |
+| **V3** | Tout DOI et toute URL du texte existent dans les sources du projet | identifiant hors base |
+
+**Ils sont syntaxiques, et c'est ce qui les rend fiables.** Aucun ne demande à
+un modèle de juger sa propre production : un modèle qui invente une référence
+la trouve tout aussi plausible à la relecture, et un contrôle fondé sur son
+jugement échouerait précisément dans le cas qu'il doit attraper.
+
+Un rejet renvoie au rédacteur, jamais au relecteur, et le circuit breaker
+arrête la boucle au troisième essai — la section n'est alors pas produite.
+Sous trois extraits pertinents, la rédaction est refusée avant même de
+commencer : un texte écrit sans matière serait rempli de mémoire par le
+modèle, c'est-à-dire d'affirmations sans source présentées comme si elles en
+avaient une.
+
 ## Lancement
 
 ```bash
@@ -108,6 +133,7 @@ Quarto — sort en code 2 : ce n'est pas un échec. Un script qui sort en 1 en e
 | US-102 | Import de sources et ingestion RAG | livrée |
 | US-201/202 | Machine à états, guardrails, circuit breaker | livrée |
 | US-PLAN-001 | Plan : génération, édition, validation | livrée |
+| US-301 | Rédaction de section sourcée, garde-fous de véracité | livrée |
 
 Chemin critique complet et ordre de traitement : [`docs/plan-execution.md`](docs/plan-execution.md).
 

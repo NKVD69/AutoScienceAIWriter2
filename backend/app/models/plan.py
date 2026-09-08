@@ -18,6 +18,13 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field, model_validator
 
+# Définition unique, du côté de la section (US-301). Une seconde énumération
+# du même nom existait ici, sans GUARDRAIL ni CORRECTING : dès qu'une section
+# était persistée dans l'un de ces deux états — que le contrat impose — la
+# lecture du plan levait sur un état « inconnu ». Deux vérités valent moins
+# qu'une.
+from app.models.section import SectionStatus
+
 MIN_DEPTH = 3
 MAX_DEPTH = 5
 MIN_ROOT_NODES = 4
@@ -39,16 +46,6 @@ class PlanStatus(StrEnum):
     DRAFT = "DRAFT"
     REVIEW = "REVIEW"
     VALIDATED = "VALIDATED"
-
-
-class SectionStatus(StrEnum):
-    NONE = "NONE"
-    DRAFTING = "DRAFTING"
-    REVIEWING = "REVIEWING"
-    VALIDATED = "VALIDATED"
-    # Le nœud portant cette section a été supprimé. La section survit :
-    # supprimer silencieusement un texte rédigé serait détruire du travail.
-    ORPHANED = "ORPHANED"
 
 
 def contains_citation(texte: str) -> str | None:

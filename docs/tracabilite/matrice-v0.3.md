@@ -36,9 +36,9 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | Filtres avancés du RAG | §7.2, §7.3 | US-RAG-002 | P1 | À implémenter |
 | Génération de problématique et de plan | §5.2 | **US-PLAN-001** | **P0** | À implémenter |
 | Édition et validation du plan | §5.2 | US-PLAN-001 | P0 | **Livrée** |
-| Rédaction de section sourcée | §5.4, §5.5 | US-301 | P1 | À implémenter |
+| Rédaction de section sourcée | §5.4, §5.5 | US-301 | P1 | **Livrée** |
 | Relecture et score de qualité | §5.4 | US-302 | P1 | À implémenter |
-| Distinction fait sourcé / hypothèse | §5.5 | US-301, US-302 | P1 | À implémenter |
+| Distinction fait sourcé / hypothèse | §5.5 | US-301, US-302 | P1 | **Livrée** (US-301) |
 | Exécution de code Python | §8 | US-004, US-401 | P0/P1 | À implémenter |
 | Éditeur de code Monaco | §2 | US-UI-003 | P1 | À implémenter |
 | Notebooks Jupyter | — | US-JUP-001 | P2 | Non planifié |
@@ -83,6 +83,13 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | Graphe déterministe | ADR-004 | §5.2 | US-201 | `test_transition_persisted`, `test_resume_after_restart` |
 | Portes humaines | ADR-004 | §5.2 | US-201, US-PLAN-001 | `test_human_gate_blocks_without_validation` |
 | Guardrails Pydantic | ADR-008 | §5.5 | US-201 | `test_invalid_output_triggers_guardrail` |
+| V1 — clé de citation hors liste close | ADR-008 | §5.5 | **US-301** | `test_v1_unknown_citation_key_rejected`, `test_v1_inline_at_key_also_checked` |
+| V2 — chiffre sourcé non rattaché | ADR-008 | §5.5 | **US-301** | `test_v2_numeric_claim_without_chunk_rejected`, `test_v2_isolated_year_not_flagged` |
+| V3 — DOI ou URL hors base | ADR-008 | §5.5 | **US-301** | `test_v3_unknown_doi_rejected`, `test_v3_known_doi_accepted` |
+| Rejet renvoyé au rédacteur, pas au relecteur | ADR-008 | §5.3 | **US-301** | `test_veracity_failure_reruns_writer_not_reviewer` |
+| Refus de rédiger sans matière | ADR-002 | §5.4 | **US-301** | `test_context_insufficient_raises_rather_than_writing` |
+| Citations persistées vérifiées | ADR-007 | §5.5 | **US-301** | `test_citations_persisted_as_verified` |
+| Édition manuelle dévérifiante, non destructrice | ADR-007 | §5.5 | **US-301** | `test_manual_edit_unverifies_removed_citations`, `test_manual_edit_never_deletes_citation_rows` |
 | Circuit breaker | ADR-008 | §5.3 | US-202 | `test_circuit_breaker_pauses_review_loop` |
 | `ERROR_STATE` terminal | ADR-008 | §5.3 | US-202 | `test_error_state_requires_human` |
 | Sandbox Wasm pour code agent | ADR-005 | §8.1, §8.2 | US-004 | `test_sandbox_factory_selects_wasm_for_agent_origin` |
@@ -127,7 +134,7 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | US-201 | LangGraph + guardrails | P0 | US-003 | ✅ `PROMPT-US-201-202.md` | **Livrée** |
 | US-202 | Circuit breaker | P0 | US-201 | ✅ `PROMPT-US-201-202.md` | **Livrée** |
 | **US-PLAN-001** | Plan : génération, édition, validation | P0 | US-003, US-201 | ✅ `PROMPT-US-PLAN-001.md` | **Livrée** |
-| US-301 | Rédaction de section | P1 | US-PLAN-001, US-102 | ✅ `PROMPT-US-301.md` | Prêt |
+| **US-301** | Rédaction de section sourcée | P1 | US-PLAN-001, US-102 | ✅ `PROMPT-US-301.md` | **Livrée** |
 | US-302 | Relecture et score | P1 | US-301 | ✅ `PROMPT-US-302.md` | Prêt |
 | US-401 | Exécution de script | P1 | US-004 | ✅ `PROMPT-US-401.md` | Prêt |
 | US-501 | BibTeX dynamique | P1 | US-301 | ✅ `PROMPT-US-501-502.md` | Prêt |
@@ -160,8 +167,9 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 
 | Risque | Test de couverture | User story |
 |---|---|---|
-| Citation inventée | `test_no_invented_citation`, `test_export_fails_on_unverified_citation` | US-301, US-501 |
-| Statistique non sourcée | `test_numeric_claim_requires_chunk_id` | US-301 |
+| Citation inventée | `test_v1_unknown_citation_key_rejected`, `test_fabricated_reference_is_never_persisted`, `test_export_fails_on_unverified_citation` | US-301, US-501 |
+| Statistique non sourcée | `test_v2_numeric_claim_without_chunk_rejected` | US-301 |
+| Section rédigée sans matière | `test_context_insufficient_raises_rather_than_writing` | US-301 |
 | Fuite de données du projet | `check_no_cloud_calls.py`, `test_no_consent_blocks_biblio_search` | Transverse |
 | Exécution de code hostile | `test_network_disabled_level1`, `test_filesystem_isolated_level1` | US-004 |
 | Dépassement de VRAM | `check_vram_budget.py` | US-006 |

@@ -115,3 +115,45 @@ def plan_guardrail_target(ok: bool, breaker_tripped: bool) -> WorkflowState:
     # Le MÊME agent est relancé : une erreur de format n'est pas un
     # problème de fond, le relecteur n'a rien à y faire.
     return WorkflowState.PLAN_DRAFTING
+
+
+# --- Nœuds de section (US-301) -------------------------------------------
+
+# Même construction que pour le plan : extrait de la table, jamais ajouté à
+# elle. `SECTION_VALIDATED` boucle vers `SECTION_DRAFTING` — c'est la section
+# suivante du plan, pas une réécriture de la même.
+SECTION_SUBGRAPH: dict[WorkflowState, frozenset[WorkflowState]] = {
+    WorkflowState.SECTION_DRAFTING: frozenset({WorkflowState.SECTION_GUARDRAIL}),
+    WorkflowState.SECTION_GUARDRAIL: frozenset(
+        {
+            WorkflowState.SECTION_REVIEWING,
+            WorkflowState.SECTION_DRAFTING,
+            WorkflowState.ERROR_STATE,
+        }
+    ),
+    WorkflowState.SECTION_REVIEWING: frozenset(
+        {WorkflowState.SECTION_CORRECTING, WorkflowState.SECTION_VALIDATED}
+    ),
+    WorkflowState.SECTION_CORRECTING: frozenset(
+        {WorkflowState.SECTION_REVIEWING, WorkflowState.ERROR_STATE}
+    ),
+    WorkflowState.SECTION_VALIDATED: frozenset(
+        {WorkflowState.SECTION_DRAFTING, WorkflowState.DOCUMENT_READY}
+    ),
+}
+
+
+def section_guardrail_target(ok: bool, breaker_tripped: bool) -> WorkflowState:
+    """Cible après les garde-fous de véracité d'une section (§5.5).
+
+    Un rejet renvoie au RÉDACTEUR, jamais au relecteur. Une clé inconnue, un
+    chiffre non rattaché ou un DOI hors base sont des défauts de production,
+    pas des défauts de fond : le relecteur n'a rien à en dire, et lui passer
+    un texte porteur d'une référence inventée lui ferait juger un contenu que
+    le produit refuse d'écrire.
+    """
+    if ok:
+        return WorkflowState.SECTION_REVIEWING
+    if breaker_tripped:
+        return WorkflowState.ERROR_STATE
+    return WorkflowState.SECTION_DRAFTING

@@ -82,6 +82,18 @@ class Settings(BaseSettings):
     # rapporter comme un dépassement de budget.
     vram_offload_expected: bool = True
 
+    # --- Rédaction (US-301) ----------------------------------------------
+    # Budget d'extraits injectés dans le message du rédacteur. Le contexte
+    # fait 8 192 tokens : au-delà de la moitié pour la matière, une section
+    # de 1 500 mots — soit ~2 000 tokens — n'aurait plus la place de sortir,
+    # et le modèle tronquerait son JSON en fin de génération.
+    writer_context_tokens: int = 4000
+    # Plus haute que la température par défaut : un plan est une structure,
+    # un texte académique a besoin d'un peu de liberté de formulation. La
+    # véracité n'en dépend pas — elle est tenue par les garde-fous
+    # syntaxiques de §5.5, pas par la prudence du modèle.
+    writer_temperature: float = 0.3
+
     # Ollama — conservé derrière l'interface (ADR-003 point 5).
     ollama_base_url: str = "http://127.0.0.1:11434"
 
