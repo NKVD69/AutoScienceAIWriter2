@@ -511,7 +511,9 @@ Relevé du 7 septembre 2026, `google/gemma-4-31b` Q8_0 résident :
 | RAM disponible | 4,2 Go | à surveiller |
 | Embeddings | **0 Go de VRAM** (CPU, ADR-013) | inchangé |
 
-**La RAM est désormais la ressource contrainte, pas la VRAM.** ADR-013 place les embeddings sur CPU, donc en RAM, et §7.1 prévoit l'ingestion de 50 PDF. Les deux charges se disputent les mêmes 4,2 Go restants. Le budget d'ingestion de §12.2 a été établi sans modèle de 34 Go en mémoire : il doit être revérifié avant l'implémentation de l'ingestion. C'est, à la date de cette révision, le risque le plus concret du dossier.
+> **Attribution du relevé.** Une seconde instance de LM Studio tournait sur le poste au moment de la mesure, avec le même modèle. Les 59,7 Go relevés ne sont donc **pas imputables à la pile applicative seule** ; la RAM réellement consommée par un service unique est nettement inférieure. Le relevé reste utile comme observation d'un poste en usage réel, pas comme budget de la pile.
+
+**La RAM reste la ressource à surveiller, plus que la VRAM.** ADR-013 place les embeddings sur CPU, donc en RAM, et §7.1 prévoit l'ingestion de 50 PDF. Les deux charges se disputent ce qui reste libre. Le budget d'ingestion de §12.2 a été établi sans modèle de cette taille en mémoire : il doit être mesuré, sur un poste n'exécutant qu'une seule instance du moteur, avant de conclure quoi que ce soit.
 
 Porte de sortie si la RAM devient bloquante : `google/gemma-4-31b-qat` (Q4_0), installé, environ deux fois plus compact.
 
