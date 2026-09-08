@@ -8,19 +8,26 @@ de façon fiable du JSON conforme à un schéma Pydantic. Si le taux d'échec es
 en tapis roulant et la promesse de latence du produit ne tient pas.
 
 Hypothèses testées
-  H2.1  Ollama est joignable et le modèle est résident (ADR-003).
-  H2.2  load_duration < 50 ms après la première requête ; TTFT < 2 s.
+  H2.1  Le moteur est joignable et le modèle est installé (ADR-003, ADR-014).
+  H2.2  Le modèle reste résident pendant toute la série.
   H2.3  Taux de conformité Pydantic au 1er essai >= 70 % sur PlanTree.
   H2.4  Taux cumulé après 3 essais >= 95 % (seuil du circuit breaker).
-  H2.5  Le format JSON natif d'Ollama améliore nettement le taux brut.
+  H2.5  Le mode JSON contraint du moteur améliore nettement le taux brut.
   H2.6  Le prompt système reste stable octet pour octet entre requêtes.
 
-Décision associée : ADR-003, ADR-004, ADR-008.
+Décision associée : ADR-003, ADR-004, ADR-008, ADR-014, ADR-015.
 Un H2.4 < 90 % impose de reconsidérer la taille du modèle ou de recourir à
 une grammaire contrainte, pas d'ajuster les prompts à la marge.
 
-Prérequis : pip install httpx pydantic ; ollama pull qwen2.5:7b-instruct-q4_K_M
-Usage : python spike_02_structured_output.py [--model M] [--n 20]
+H2.2 a changé de nature avec ADR-014 : LM Studio ne publie pas
+`load_duration`, mais expose l'état de chargement de chaque modèle. La
+résidence s'observe donc directement au lieu d'être inférée d'une durée. Le
+seuil de latence de la V0.3 est levé par ADR-015 : le temps de génération
+n'est pas un critère de ce spike, seule la conformité l'est.
+
+Prérequis : pip install httpx pydantic ; le modèle installé dans le moteur.
+Usage : python spike_02_structured_output.py [--backend lmstudio|ollama]
+        [--model M] [--n 20] [--timeout 3600]
 Sortie : 0 conforme · 1 non conforme · 2 environnement insuffisant
 """
 from __future__ import annotations
@@ -33,8 +40,17 @@ except ImportError:
     print("Dépendances manquantes : pip install httpx pydantic")
     sys.exit(2)
 
-BASE_URL = "http://127.0.0.1:11434"
-DEFAULT_MODEL = "qwen2.5:7b-instruct-q4_K_M"
+# Un moteur par entrée : URL de base, modèle par défaut.
+BACKENDS = {
+    "lmstudio": ("http://127.0.0.1:1234", "google/gemma-4-31b"),
+    "ollama": ("http://127.0.0.1:11434", "qwen2.5:7b-instruct-q4_K_M"),
+}
+DEFAULT_BACKEND = "lmstudio"
+
+# Le délai par défaut de la V0.3 était de 300 s. Sur un modèle qui déverse
+# sur CPU (ADR-015), une seule génération de plan peut dépasser la demi-heure :
+# le harnais expirait sur son propre préchauffage avant d'avoir rien mesuré.
+DEFAULT_TIMEOUT_S = 3600
 
 SYSTEM_PROMPT = (
     "Tu es un architecte de plans de recherche de niveau doctoral.\n"
@@ -135,29 +151,96 @@ def extract_json(raw: str) -> str:
     raise ValueError("objet JSON non refermé")
 
 
-def generate(client, model, user, fmt_json: bool):
-    body = {
-        "model": model, "system": SYSTEM_PROMPT, "prompt": user,
-        "stream": False, "keep_alive": -1,
-        "options": {"temperature": 0.2, "num_ctx": 8192},
-    }
-    if fmt_json:
-        body["format"] = "json"
-    t = time.perf_counter()
-    r = client.post(f"{BASE_URL}/api/generate", json=body, timeout=300)
-    r.raise_for_status()
-    d = r.json()
-    return d.get("response", ""), {
-        "wall_ms": (time.perf_counter() - t) * 1000,
-        "load_ms": d.get("load_duration", 0) / 1e6,
-        "prompt_eval_ms": d.get("prompt_eval_duration", 0) / 1e6,
-        "eval_ms": d.get("eval_duration", 0) / 1e6,
-        "eval_count": d.get("eval_count", 0),
-    }
+class Engine:
+    """Adaptateur de moteur. Les deux API sont locales et sans état commun.
+
+    Une métrique qu'un moteur ne publie pas vaut `None`, jamais `0` : un zéro
+    se lirait comme « poids restés résidents », c'est-à-dire comme la preuve
+    de ce que H2.2 cherche à établir.
+    """
+
+    def __init__(self, name: str, base_url: str, model: str, timeout: float):
+        self.name, self.base_url, self.model, self.timeout = name, base_url, model, timeout
+        self.client = httpx.Client(timeout=timeout)
+
+    # -- Disponibilité ----------------------------------------------------
+    def installed_models(self) -> list[str]:
+        if self.name == "lmstudio":
+            d = self.client.get(f"{self.base_url}/api/v0/models", timeout=10).json()
+            return [m.get("id", "") for m in d.get("data", [])]
+        d = self.client.get(f"{self.base_url}/api/tags", timeout=10).json()
+        return [m.get("name", "") for m in d.get("models", [])]
+
+    def loaded_models(self) -> list[str]:
+        """Modèles actuellement résidents. Vide si le moteur ne le dit pas."""
+        try:
+            if self.name == "lmstudio":
+                d = self.client.get(f"{self.base_url}/api/v0/models", timeout=10).json()
+                return [m.get("id", "") for m in d.get("data", []) if m.get("state") == "loaded"]
+            d = self.client.get(f"{self.base_url}/api/ps", timeout=10).json()
+            return [m.get("name", "") for m in d.get("models", [])]
+        except Exception:
+            return []
+
+    def is_resident(self) -> bool:
+        return self.model in self.loaded_models()
+
+    # -- Génération -------------------------------------------------------
+    def generate(self, user: str, fmt_json: bool):
+        t = time.perf_counter()
+        if self.name == "lmstudio":
+            body = {
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": user},
+                ],
+                "stream": False,
+                "temperature": 0.2,
+                # Analogue de keep_alive=-1 (ADR-014) : réarmé à chaque appel.
+                "ttl": 86_400,
+            }
+            if fmt_json:
+                body["response_format"] = {"type": "json_object"}
+            r = self.client.post(f"{self.base_url}/api/v0/chat/completions", json=body)
+            r.raise_for_status()
+            d = r.json()
+            choix = (d.get("choices") or [{}])[0]
+            texte = (choix.get("message") or {}).get("content") or ""
+            stats = d.get("stats") or {}
+            usage = d.get("usage") or {}
+            return texte, {
+                "wall_ms": (time.perf_counter() - t) * 1000,
+                # LM Studio ne publie pas de durée de chargement (ADR-014).
+                "load_ms": None,
+                "ttft_ms": (stats.get("time_to_first_token") or 0) * 1000 or None,
+                "tok_per_s": stats.get("tokens_per_second"),
+                "eval_count": usage.get("completion_tokens", 0),
+            }
+
+        body = {
+            "model": self.model, "system": SYSTEM_PROMPT, "prompt": user,
+            "stream": False, "keep_alive": -1,
+            "options": {"temperature": 0.2, "num_ctx": 8192},
+        }
+        if fmt_json:
+            body["format"] = "json"
+        r = self.client.post(f"{self.base_url}/api/generate", json=body)
+        r.raise_for_status()
+        d = r.json()
+        eval_ms = d.get("eval_duration", 0) / 1e6
+        n = d.get("eval_count", 0)
+        return d.get("response", ""), {
+            "wall_ms": (time.perf_counter() - t) * 1000,
+            "load_ms": d.get("load_duration", 0) / 1e6,
+            "ttft_ms": d.get("prompt_eval_duration", 0) / 1e6 or None,
+            "tok_per_s": (n / (eval_ms / 1000)) if eval_ms > 0 else None,
+            "eval_count": n,
+        }
 
 
-def attempt(client, model, user, fmt_json: bool):
-    raw, m = generate(client, model, user, fmt_json)
+def attempt(engine: "Engine", user: str, fmt_json: bool):
+    raw, m = engine.generate(user, fmt_json)
     try:
         obj = json.loads(extract_json(raw))
     except Exception as e:  # noqa: BLE001
@@ -172,29 +255,40 @@ def attempt(client, model, user, fmt_json: bool):
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default=DEFAULT_MODEL)
+    ap.add_argument("--backend", default=DEFAULT_BACKEND, choices=sorted(BACKENDS))
+    ap.add_argument("--model", default=None)
     ap.add_argument("--n", type=int, default=15, help="générations par mode")
+    ap.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_S)
+    ap.add_argument("--modes", default="both", choices=["both", "json", "plain"])
     args = ap.parse_args()
 
-    print("SPIKE 02 — Sortie structurée d'un modèle 7B local\n")
-    client = httpx.Client()
+    base_url, default_model = BACKENDS[args.backend]
+    engine = Engine(args.backend, base_url, args.model or default_model, args.timeout)
+
+    print("SPIKE 02 — Sortie structurée d'un modèle local\n")
+    print(f"  moteur : {engine.name} · {engine.base_url}")
+    print(f"  modèle : {engine.model}")
+    print(f"  délai  : {engine.timeout:.0f} s par requête\n")
 
     # ---- H2.1 ---------------------------------------------------------
     print("H2.1 — Disponibilité")
     try:
-        tags = client.get(f"{BASE_URL}/api/tags", timeout=5).json()
+        names = engine.installed_models()
     except Exception as e:  # noqa: BLE001
-        print(f"  [ÉCHEC] Ollama injoignable sur {BASE_URL} : {e}")
-        print("          Démarrer Ollama puis : ollama pull " + args.model)
+        print(f"  [ÉCHEC] {engine.name} injoignable sur {engine.base_url} : {e}")
+        print("          LM Studio : « lms server start ». Ollama : « ollama serve ».")
         return 2
-    names = [m["name"] for m in tags.get("models", [])]
-    if not any(args.model.split(":")[0] in n for n in names):
-        print(f"  [ÉCHEC] modèle {args.model} absent. Modèles présents : {', '.join(names) or 'aucun'}")
+    if engine.model not in names:
+        print(f"  [ÉCHEC] modèle {engine.model} absent. Présents : {', '.join(names) or 'aucun'}")
         return 2
-    print(f"  [OK ] {args.model} disponible")
+    print(f"  [OK ] {engine.model} installé")
 
     print("\n  Préchauffage…")
-    generate(client, args.model, "Réponds par le mot OK.", False)
+    t0 = time.perf_counter()
+    engine.generate("Réponds par le mot OK.", False)
+    print(f"  préchauffage terminé en {time.perf_counter() - t0:.1f} s")
+    resident_avant = engine.is_resident()
+    print(f"  résident après préchauffage : {'oui' if resident_avant else 'non observable'}")
 
     # ---- H2.6 stabilité du prompt système ------------------------------
     digest = hashlib.sha256(SYSTEM_PROMPT.encode()).hexdigest()[:12]
@@ -203,7 +297,9 @@ def main() -> int:
     verdicts: dict[str, bool] = {}
     summary = {}
 
-    for fmt_json in (False, True):
+    modes = {"both": (False, True), "json": (True,), "plain": (False,)}[args.modes]
+
+    for fmt_json in modes:
         label = "format=json" if fmt_json else "prompt seul"
         print(f"\n{'=' * 62}\nMode : {label} · {args.n} générations\n")
         first_ok = 0
@@ -217,12 +313,18 @@ def main() -> int:
             user = USER_TEMPLATE.format(subject=subject, discipline=disc, target=target,
                                         lo=int(target * 0.7), hi=int(target * 1.3))
             ok = False
+            t_case = time.perf_counter()
             for k in range(1, 4):
-                ok, kind, detail, m = attempt(client, args.model, user, fmt_json)
-                loads.append(m["load_ms"])
-                ttfts.append(m["prompt_eval_ms"])
-                if m["eval_ms"] > 0:
-                    tps.append(m["eval_count"] / (m["eval_ms"] / 1000))
+                ok, kind, detail, m = attempt(engine, user, fmt_json)
+                # Les métriques absentes sont ignorées, jamais comptées comme
+                # des zéros : une moyenne diluée par des zéros factices est
+                # pire qu'une moyenne sur moins de points.
+                if m["load_ms"] is not None:
+                    loads.append(m["load_ms"])
+                if m["ttft_ms"] is not None:
+                    ttfts.append(m["ttft_ms"])
+                if m["tok_per_s"]:
+                    tps.append(m["tok_per_s"])
                 if k == 1 and ok:
                     first_ok += 1
                 if ok:
@@ -233,7 +335,8 @@ def main() -> int:
                 user += (f"\n\nTa réponse précédente était invalide ({kind}) : {detail}\n"
                          "Corrige et renvoie UNIQUEMENT le JSON.")
             print(f"  {i + 1:>3}/{args.n}  {'conforme' if ok else 'ÉCHEC après 3 essais':<22}"
-                  f" essais={attempts_used[-1] if ok else 3}")
+                  f" essais={attempts_used[-1] if ok else 3}"
+                  f" · {time.perf_counter() - t_case:.0f} s", flush=True)
 
         r1 = 100 * first_ok / args.n
         r3 = 100 * cumulative_ok / args.n
@@ -245,10 +348,12 @@ def main() -> int:
         if tps:
             print(f"  débit            : {statistics.median(tps):.1f} tok/s")
         if len(loads) > 1:
-            after_first = [x for x in loads[1:]]
+            after_first = loads[1:]
             print(f"  load_duration    : p95 {sorted(after_first)[int(.95 * len(after_first)) - 1]:.1f} ms")
+        else:
+            print(f"  load_duration    : non publié par {engine.name} (ADR-014)")
         if ttfts:
-            print(f"  prompt_eval      : p95 {sorted(ttfts)[int(.95 * len(ttfts)) - 1]:.0f} ms")
+            print(f"  premier token    : p95 {sorted(ttfts)[int(.95 * len(ttfts)) - 1]:.0f} ms")
         if failures:
             print("\n  Causes d'échec les plus fréquentes :")
             for cause, n in sorted(failures.items(), key=lambda kv: -kv[1])[:5]:
@@ -257,13 +362,19 @@ def main() -> int:
         if fmt_json:
             verdicts["H2.3 conformité 1er essai >= 70 %"] = r1 >= 70
             verdicts["H2.4 conformité 3 essais >= 95 %"] = r3 >= 95
-            after_first = loads[1:] or [0]
-            verdicts["H2.2 load_duration p95 < 50 ms"] = sorted(after_first)[int(.95 * len(after_first)) - 1] < 50
 
     if len(summary) == 2:
         a = summary["prompt seul"][0]
         b = summary["format=json"][0]
-        verdicts["H2.5 format=json améliore le 1er essai"] = b >= a
+        verdicts["H2.5 mode JSON améliore le 1er essai"] = b >= a
+
+    # ---- H2.2 : résidence, et non durée de chargement (ADR-014) --------
+    resident_apres = engine.is_resident()
+    if resident_avant or resident_apres:
+        verdicts["H2.2 modèle résident pendant toute la série"] = resident_apres
+    else:
+        print(f"\n  [NON MESURÉ] {engine.name} ne publie pas l'état de chargement ;"
+              " H2.2 n'est pas évaluable sur ce moteur.")
 
     print("\n" + "=" * 62)
     print("VERDICTS")
@@ -273,8 +384,8 @@ def main() -> int:
     print(f"\nSPIKE 02 : {len(verdicts) - len(failed)}/{len(verdicts)} conformes")
     if failed:
         print("\nSi H2.4 est sous 90 %, la réponse n'est PAS d'ajuster les prompts :")
-        print("  - modèle plus grand si la VRAM le permet, ou")
-        print("  - grammaire contrainte (GBNF via llama.cpp) plutôt qu'Ollama, ou")
+        print("  - modèle plus grand si la mémoire le permet, ou")
+        print("  - grammaire contrainte (GBNF, ou response_format json_schema), ou")
         print("  - découpage du PlanTree en plusieurs générations plus simples.")
     return 1 if failed else 0
 

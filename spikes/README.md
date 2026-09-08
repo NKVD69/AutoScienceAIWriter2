@@ -39,11 +39,17 @@ sur un poste représentatif.
 | Spike | Prérequis |
 |---|---|
 | 01 | `pip install sqlite-vec` |
-| 02 | Ollama démarré · `ollama pull qwen2.5:7b-instruct-q4_K_M` · `pip install httpx pydantic` |
+| 02 | Moteur démarré (`lms server start`, ou `ollama serve`) · modèle installé · `pip install httpx pydantic` |
 | 03 | Node ≥ 20 · `npm i pyodide` |
 | 04 | `quarto` ≥ 1.4 dans le PATH · `quarto install tinytex` |
 
-Le spike 02 doit être exécuté sur la **machine cible**, avec sa VRAM réelle.
+Le spike 02 doit être exécuté sur la **machine cible**, avec sa mémoire réelle.
+
+Depuis ADR-014, il vise LM Studio par défaut : `--backend lmstudio|ollama`.
+Depuis ADR-015, son délai par requête est de 3 600 s et non de 300 s — sur un
+modèle qui déverse sur CPU, une génération de plan dépasse la demi-heure, et
+l'ancien délai faisait expirer le harnais sur son propre préchauffage avant
+toute mesure. `--n` et `--modes` permettent de borner le coût d'une série.
 Mené sur un poste mieux doté, il ne mesure rien d'utile.
 
 ## Critères de décision
