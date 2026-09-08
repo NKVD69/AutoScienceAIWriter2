@@ -110,6 +110,11 @@ class Settings(BaseSettings):
     # qu'un enregistrement par projet n'existe pas (US-BIBLIO-001).
     embedding_download_consent: bool = False
 
+    # --- Découpage RAG (§7.1) --------------------------------------------
+    # Repli en fenêtre glissante quand un document n'expose pas de sections.
+    chunk_tokens: int = 512
+    chunk_overlap: int = 64
+
     @property
     def projects_dir(self) -> Path:
         return self.data_dir / "projects"

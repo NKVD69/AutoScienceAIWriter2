@@ -31,16 +31,16 @@ def migrations_copy(tmp_path: Path) -> Path:
 async def test_discover_is_ordered(migrations_copy: Path) -> None:
     """L'ordre est numerique, pas lexicographique : 010 vient apres 002."""
     (migrations_copy / "010_dix.sql").write_text("SELECT 1;", encoding="utf-8")
-    (migrations_copy / "003_trois.sql").write_text("SELECT 1;", encoding="utf-8")
+    (migrations_copy / "004_quatre.sql").write_text("SELECT 1;", encoding="utf-8")
     versions = [v for v, _ in discover(migrations_copy)]
     assert versions == sorted(versions)
-    assert versions == [1, 2, 3, 10]
+    assert versions == [1, 2, 3, 4, 10]
 
 
 async def test_migrations_apply_schema(project_db: Path) -> None:
     async with connect(project_db) as conn:
         applied = await run_migrations(conn)
-        assert applied == [1, 2]
+        assert applied == [1, 2, 3]
         async with conn.execute(
             "SELECT name FROM sqlite_master WHERE type IN ('table','trigger')"
         ) as cur:
@@ -65,14 +65,24 @@ async def test_migrations_apply_schema(project_db: Path) -> None:
         assert table in names, f"{table} absente du schema applique"
 
 
+async def test_migration_003_adds_section_kind(project_db: Path) -> None:
+    """US-102 : un chunk de bibliographie doit pouvoir etre marque."""
+    async with connect(project_db) as conn:
+        await run_migrations(conn)
+        async with conn.execute("PRAGMA table_info(chunk)") as cur:
+            colonnes = {str(r[1]): (str(r[2]), r[4]) for r in await cur.fetchall()}
+    assert "section_kind" in colonnes
+    assert colonnes["section_kind"] == ("TEXT", "'body'")
+
+
 async def test_migrations_idempotent(project_db: Path) -> None:
     async with connect(project_db) as conn:
         first = await run_migrations(conn)
         second = await run_migrations(conn)
         versions = await applied_versions(conn)
-    assert first == [1, 2]
+    assert first == [1, 2, 3]
     assert second == []
-    assert set(versions) == {1, 2}
+    assert set(versions) == {1, 2, 3}
 
 
 async def test_migrations_detect_modified_file(project_db: Path, migrations_copy: Path) -> None:
@@ -108,6 +118,33 @@ async def test_embedding_dimension_appears_only_as_placeholder() -> None:
     assert declarations == 1
 
 
+async def _effective_schema(conn) -> dict:
+    """Schema tel que le moteur le comprend : objets, colonnes, types.
+
+    La comparaison porte sur le schema EFFECTIF, non sur le texte du DDL.
+    `ALTER TABLE ADD COLUMN` fait reecrire par SQLite la chaine stockee dans
+    `sqlite_master` : deux schemas identiques y apparaissent differemment,
+    et comparer les textes signalerait une divergence qui n'existe pas.
+    """
+    async with conn.execute(
+        "SELECT type, name FROM sqlite_master"
+        " WHERE name NOT LIKE 'sqlite_%' AND name <> 'schema_migration'"
+        " AND name NOT LIKE 'vec_chunk_%' ORDER BY type, name"
+    ) as cur:
+        objets = [(str(r[0]), str(r[1])) for r in await cur.fetchall()]
+
+    colonnes: dict[str, list] = {}
+    for kind, name in objets:
+        if kind != "table":
+            continue
+        async with conn.execute(f"PRAGMA table_info({name})") as cur:
+            colonnes[name] = [
+                (str(r[1]), str(r[2]).upper(), int(r[3]), r[4], int(r[5]))
+                for r in await cur.fetchall()
+            ]
+    return {"objets": objets, "colonnes": colonnes}
+
+
 async def test_schema_and_migration_agree(project_db: Path, tmp_path: Path) -> None:
     """schema.sql decrit le schema COURANT : la suite complete des migrations
     doit produire exactement le meme, sinon les deux divergent en silence."""
@@ -115,21 +152,13 @@ async def test_schema_and_migration_agree(project_db: Path, tmp_path: Path) -> N
 
     async with connect(project_db) as conn:
         await run_migrations(conn)
-        async with conn.execute(
-            "SELECT type, name, sql FROM sqlite_master"
-            " WHERE name NOT LIKE 'sqlite_%' AND name <> 'schema_migration'"
-            " AND name NOT LIKE 'vec_chunk_%' ORDER BY name"
-        ) as cur:
-            depuis_migration = [tuple(r) for r in await cur.fetchall()]
+        depuis_migration = await _effective_schema(conn)
 
     direct = tmp_path / "direct.sqlite"
     async with connect(direct) as conn:
         await conn.executescript(render(schema_sql))
         await conn.commit()
-        async with conn.execute(
-            "SELECT type, name, sql FROM sqlite_master"
-            " WHERE name NOT LIKE 'sqlite_%' AND name NOT LIKE 'vec_chunk_%' ORDER BY name"
-        ) as cur:
-            depuis_schema = [tuple(r) for r in await cur.fetchall()]
+        depuis_schema = await _effective_schema(conn)
 
-    assert depuis_migration == depuis_schema
+    assert depuis_migration["objets"] == depuis_schema["objets"]
+    assert depuis_migration["colonnes"] == depuis_schema["colonnes"]

@@ -54,6 +54,10 @@ CREATE TABLE chunk (
   page_start  INTEGER,
   page_end    INTEGER,
   token_count INTEGER,
+  -- 'body' ou 'references' (US-102, migration 003). Un chunk de
+  -- bibliographie est indexé pour l'extraction de références, jamais rendu
+  -- à la rédaction : ce serait la matière première d'une citation inventée.
+  section_kind TEXT NOT NULL DEFAULT 'body',
   UNIQUE(source_id, ordinal)
 );
 
@@ -186,3 +190,4 @@ CREATE INDEX idx_audit_project    ON audit_log(project_id, id);
 -- contrainte la transforme en violation a l'ecriture plutot qu'en
 -- incoherence decouverte des mois plus tard.
 CREATE UNIQUE INDEX idx_audit_prev ON audit_log(project_id, prev_hash);
+CREATE INDEX idx_chunk_section ON chunk(source_id, section_kind);

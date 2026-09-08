@@ -67,6 +67,15 @@ select = ["E", "F", "W", "I", "UP", "B", "ASYNC", "TID", "RUF"]
 "spikes/*.py" = ["TID251"]
 "backend/tests/*" = ["TID251"]
 
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI déclare ses paramètres par appel dans la valeur par défaut. Ce
+# n'est pas le piège du mutable partagé que B008 vise : ces objets sont des
+# descripteurs immuables lus par le framework à la construction de la route.
+extend-immutable-calls = [
+  "fastapi.Body", "fastapi.Depends", "fastapi.File", "fastapi.Form",
+  "fastapi.Header", "fastapi.Path", "fastapi.Query",
+]
+
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 # ADR-001 : accès base exclusivement via aiosqlite dans le code applicatif.
 "sqlite3".msg = "ADR-001 : le code applicatif accède à SQLite via aiosqlite uniquement."

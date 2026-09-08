@@ -51,12 +51,19 @@ async def insert_chunk_with_embedding(
     embedding: list[float],
     page_start: int | None = None,
     page_end: int | None = None,
+    section_kind: str = "body",
+    tx: bool = False,
 ) -> int:
     """Insère un chunk et son vecteur dans une seule transaction.
 
     Les deux écritures sont indissociables : un `chunk` sans vecteur est
     invisible à la recherche, un vecteur sans `chunk` est un résultat sans
     provenance — donc inutilisable pour citer.
+
+    `tx=True` indique qu'une transaction est déjà ouverte par l'appelant :
+    l'ingestion en ouvre une par SOURCE, pas par chunk, pour qu'une source
+    interrompue ne laisse aucun chunk partiel (US-102). Ouvrir ici une
+    transaction imbriquée échouerait.
     """
     settings = get_settings()
     if len(embedding) != settings.embedding_dim:
@@ -64,11 +71,11 @@ async def insert_chunk_with_embedding(
             f"Dimension d'embedding attendue {settings.embedding_dim}, reçue {len(embedding)}."
         )
 
-    async with transaction(conn):
+    async def _ecrire() -> int:
         cur = await conn.execute(
-            "INSERT INTO chunk (source_id, ordinal, text, page_start, page_end, token_count) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (source_id, ordinal, text, page_start, page_end, len(text.split())),
+            "INSERT INTO chunk (source_id, ordinal, text, page_start, page_end, token_count,"
+            " section_kind) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (source_id, ordinal, text, page_start, page_end, len(text.split()), section_kind),
         )
         chunk_id = cur.lastrowid
         if chunk_id is None:  # pragma: no cover - le moteur renseigne toujours lastrowid
@@ -77,7 +84,12 @@ async def insert_chunk_with_embedding(
             "INSERT INTO vec_chunk (rowid, embedding) VALUES (?, ?)",
             (chunk_id, sqlite_vec.serialize_float32(embedding)),
         )
-    return int(chunk_id)
+        return int(chunk_id)
+
+    if tx:
+        return await _ecrire()
+    async with transaction(conn):
+        return await _ecrire()
 
 
 async def search_similar_chunks(
@@ -87,8 +99,14 @@ async def search_similar_chunks(
     project_id: int | None = None,
     year_min: int | None = None,
     exclude_preprints: bool = False,
+    include_references: bool = False,
 ) -> list[ChunkHit]:
-    """Recherche KNN, jointe à la provenance relationnelle."""
+    """Recherche KNN, jointe à la provenance relationnelle.
+
+    `include_references` est faux par défaut : les chunks de bibliographie
+    sont indexés pour l'extraction de références, jamais rendus au rédacteur
+    (US-102).
+    """
     settings = get_settings()
     if len(query_embedding) != settings.embedding_dim:
         raise ValueError(
@@ -106,6 +124,8 @@ async def search_similar_chunks(
         params.append(year_min)
     if exclude_preprints:
         filters.append("s.is_preprint = 0")
+    if not include_references:
+        filters.append("c.section_kind <> 'references'")
 
     inner_k = min(k * _FILTER_EXPANSION, _FILTER_EXPANSION_CAP) if filters else k
     where = f"WHERE {' AND '.join(filters)}" if filters else ""

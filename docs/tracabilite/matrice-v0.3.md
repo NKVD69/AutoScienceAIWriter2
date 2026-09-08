@@ -28,11 +28,11 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | Exigence V3 | Spéc. V0.3 | User story | Priorité | Statut |
 |---|---|---|---|---|
 | Saisie d'un sujet et création de projet | §4.2 | US-101 | P0 | **Livrée** |
-| Import de PDF et de références | §7.1 | US-102 | P0 | À implémenter |
+| Import de PDF et de références | §7.1 | US-102 | P0 | **Livrée** |
 | Recherche bibliographique multi-bases | §10 | US-BIBLIO-001 | **P0** | À implémenter |
 | Import DOI / BibTeX / RIS | §10 | US-IMPORT-001 | P1 | À implémenter |
 | Synchronisation Zotero | §10 | US-ZOTERO-001 | P2 | Non planifié |
-| Base de connaissances vectorielle | §4.3, §7 | US-002, US-102 | P0 | US-002 livrée · US-102 à implémenter |
+| Base de connaissances vectorielle | §4.3, §7 | US-002, US-102 | P0 | **Livrée** |
 | Filtres avancés du RAG | §7.2, §7.3 | US-RAG-002 | P1 | À implémenter |
 | Génération de problématique et de plan | §5.2 | **US-PLAN-001** | **P0** | À implémenter |
 | Édition et validation du plan | §5.2 | US-PLAN-001 | P0 | À implémenter |
@@ -122,7 +122,7 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | **US-005** | Embeddings CPU hors Ollama | P0 | US-002 | ✅ `PROMPT-US-005.md` | **Livrée** |
 | **US-006** | Budget VRAM en CI | P0 | US-003, US-005 | ✅ `PROMPT-US-006.md` | Prêt |
 | US-101 | CRUD projets | P0 | US-002 | ✅ `PROMPT-US-101.md` | **Livrée** |
-| US-102 | Import sources et ingestion RAG | P0 | US-002, US-005 | ✅ `PROMPT-US-102.md` | Prêt |
+| US-102 | Import sources et ingestion RAG | P0 | US-002, US-005 | ✅ `PROMPT-US-102.md` | **Livrée** |
 | US-BIBLIO-001 | Recherche bibliographique | P0 | US-101 | ✅ `PROMPT-US-BIBLIO-001.md` | Prêt |
 | US-201 | LangGraph + guardrails | P0 | US-003 | ✅ `PROMPT-US-201-202.md` | Prêt |
 | US-202 | Circuit breaker | P0 | US-201 | ✅ `PROMPT-US-201-202.md` | Prêt |
@@ -283,3 +283,16 @@ prompts système figés, second modèle de code refusé sous 12 Go de VRAM.
 La contrainte par schéma JSON est disponible sous LM Studio, schéma récursif
 compris : la porte de sortie qu'ADR-008 envisageait est utilisable sans
 changer de moteur.
+
+---
+
+## 10. Sérialisation des charges — ADR-016
+
+| Décision | ADR | Spéc. | User story | Scripts et tests |
+|---|---|---|---|---|
+| Rédaction et ingestion jamais simultanées | **ADR-016** | §12.1 | US-005, US-102 | `test_generation_and_ingestion_never_overlap` |
+| Réservation par lot, non par ingestion | ADR-016 | — | US-005 | `test_ingestion_reserves_per_batch_not_per_run` |
+| Réentrance : le rédacteur interroge le RAG | ADR-016 | §5.4 | US-102 | `test_reservation_is_reentrant_within_a_task` |
+| Pagination obligatoire sur chaque chunk | — | §7.1 | US-102 | `test_chunk_has_page_start_and_page_end` |
+| Bibliographie écartée de la rédaction | — | §5.5 | US-102 | `test_references_section_marked_and_excluded` |
+| Aucune tentative d'OCR | — | §7.1 | US-102 | `test_extract_scanned_pdf_raises_actionable_error` |
