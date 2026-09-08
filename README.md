@@ -106,6 +106,7 @@ Quarto — sort en code 2 : ce n'est pas un échec. Un script qui sort en 1 en e
 | US-005 | Embeddings CPU hors Ollama | livrée |
 | US-101 | CRUD projets, registre, sauvegarde | livrée |
 | US-102 | Import de sources et ingestion RAG | livrée |
+| US-201/202 | Machine à états, guardrails, circuit breaker | livrée |
 
 Chemin critique complet et ordre de traitement : [`docs/plan-execution.md`](docs/plan-execution.md).
 

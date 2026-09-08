@@ -12,6 +12,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
+from app.agents.state import WorkflowState
+
 
 class SourceKind(StrEnum):
     ARTICLE = "article"
@@ -50,12 +52,12 @@ class SearchRequest(BaseModel):
     exclude_preprints: bool = False
 
 
-class TaskState(StrEnum):
-    """Sous-ensemble de `TaskState` du contrat utilisé par l'ingestion."""
-
-    SOURCES_INGESTING = "SOURCES_INGESTING"
-    SOURCES_READY = "SOURCES_READY"
-    ERROR_STATE = "ERROR_STATE"
+# `TaskState` du contrat, en entier. US-102 n'en déclarait qu'un
+# sous-ensemble ; US-201 a besoin des seize états. Plutôt que d'en tenir une
+# seconde liste — qui finirait par diverger, et dont la forme fonctionnelle
+# de `StrEnum` mettrait au passage les valeurs en minuscules — on réutilise
+# la définition faisant foi.
+TaskState = WorkflowState
 
 
 class Task(BaseModel):

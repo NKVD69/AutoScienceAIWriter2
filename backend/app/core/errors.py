@@ -91,6 +91,37 @@ class ConflictError(AppError):
         }
 
 
+class InvalidTransitionError(AppError):
+    """Transition refusée par le graphe (ADR-004).
+
+    Le graphe ne s'adapte pas : ce qui n'est pas déclaré n'arrive pas. Le
+    message nomme les cibles admises, pour qu'un défaut d'appel se corrige
+    sans lire la table.
+    """
+
+    code = "INVALID_TRANSITION"
+    status_code = 409
+
+    @classmethod
+    def undeclared(cls, depuis: object, vers: object, admises: object) -> InvalidTransitionError:
+        cibles = ", ".join(sorted(str(c) for c in admises)) or "aucune (état terminal)"
+        return cls(
+            f"Transition {depuis} → {vers} non déclarée. Cibles admises : {cibles}.",
+            current_state=str(depuis),
+            attempted_state=str(vers),
+        )
+
+    @classmethod
+    def human_gate(cls, depuis: object, vers: object) -> InvalidTransitionError:
+        return cls(
+            f"{depuis} → {vers} est une porte de validation humaine. Aucun nœud, "
+            "aucun score de qualité ne la franchit : elle exige un appel "
+            "explicite à human_validate.",
+            current_state=str(depuis),
+            attempted_state=str(vers),
+        )
+
+
 class ExtensionLoadError(AppError):
     """Le binaire SQLite de l'interpréteur refuse les extensions chargeables.
 

@@ -94,18 +94,36 @@ def test_single_insert_path_into_audit_log() -> None:
 
 
 def _fichiers_a_controler() -> list[Path]:
+    """Surfaces du PRODUIT : code applicatif, documentation, interface.
+
+    Le parcours est explicitement borné aux répertoires du projet. Un
+    `rglob` depuis la racine descendrait dans `.venv` et jugerait la
+    documentation de bibliothèques tierces, sur laquelle ce dépôt n'a aucune
+    prise — le contrôle deviendrait ingérable, donc désactivé.
+    """
     cibles: list[Path] = []
     for base, motifs in (
         (RACINE / "backend" / "app", ("*.py", "*.sql")),
         (RACINE / "docs", ("*.md",)),
         (RACINE / "frontend" / "src", ("*.ts", "*.html")),
-        (RACINE, ("README.md",)),
     ):
         if not base.exists():
             continue
         for motif in motifs:
             cibles.extend(p for p in base.rglob(motif) if p.is_file())
+
+    readme = RACINE / "README.md"
+    if readme.is_file():
+        cibles.append(readme)
     return cibles
+
+
+def test_wording_check_scope_excludes_dependencies() -> None:
+    """Le controle ne doit juger que ce que ce depot ecrit."""
+    fichiers = _fichiers_a_controler()
+    assert fichiers, "le contrôle ne porte sur aucun fichier"
+    assert not any(".venv" in p.parts or "site-packages" in p.parts for p in fichiers)
+    assert any(p.name == "README.md" and p.parent == RACINE for p in fichiers)
 
 
 def test_wording_no_immutable_claim() -> None:

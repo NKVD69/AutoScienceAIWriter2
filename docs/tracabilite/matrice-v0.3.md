@@ -54,7 +54,7 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | Rôles et authentification locale | — | US-AUTH-001 | P1 | À implémenter |
 | Tableau de bord d'avancement | — | US-DASH-001 | P1 | À implémenter |
 | Mode pipeline automatique | §5.2 | US-WORKFLOW-001 | P1 | À implémenter |
-| Mode pas à pas | §5.2 | US-201 | P0 | À implémenter |
+| Mode pas à pas | §5.2 | US-201 | P0 | **Livrée** |
 | Interface IDE à panneaux | §2 | US-801 | P1 | À implémenter |
 | Éditeur `.qmd` | §9.1 | US-UI-002 | P1 | À implémenter |
 | Versioning et comparaison | — | US-UI-004 | P2 | Non planifié |
@@ -124,8 +124,8 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | US-101 | CRUD projets | P0 | US-002 | ✅ `PROMPT-US-101.md` | **Livrée** |
 | US-102 | Import sources et ingestion RAG | P0 | US-002, US-005 | ✅ `PROMPT-US-102.md` | **Livrée** |
 | US-BIBLIO-001 | Recherche bibliographique | P0 | US-101 | ✅ `PROMPT-US-BIBLIO-001.md` | Prêt |
-| US-201 | LangGraph + guardrails | P0 | US-003 | ✅ `PROMPT-US-201-202.md` | Prêt |
-| US-202 | Circuit breaker | P0 | US-201 | ✅ `PROMPT-US-201-202.md` | Prêt |
+| US-201 | LangGraph + guardrails | P0 | US-003 | ✅ `PROMPT-US-201-202.md` | **Livrée** |
+| US-202 | Circuit breaker | P0 | US-201 | ✅ `PROMPT-US-201-202.md` | **Livrée** |
 | **US-PLAN-001** | Plan : génération, édition, validation | P0 | US-003, US-201 | ✅ `PROMPT-US-PLAN-001.md` | Prêt |
 | US-301 | Rédaction de section | P1 | US-PLAN-001, US-102 | ✅ `PROMPT-US-301.md` | Prêt |
 | US-302 | Relecture et score | P1 | US-301 | ✅ `PROMPT-US-302.md` | Prêt |

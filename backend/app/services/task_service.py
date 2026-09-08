@@ -140,8 +140,32 @@ async def resumable(conn: aiosqlite.Connection, project_id: int) -> Task | None:
 # --- File d'événements ----------------------------------------------------
 
 
+EVENT_TYPES = frozenset({"state", "token", "progress", "guardrail", "error", "done"})
+
+
+def emit_guardrail(task_id: int, agent: str, essai: int, champ: str | None) -> None:
+    """Signale un rejet de guardrail, avec de quoi améliorer le prompt.
+
+    Le nom de l'agent, le numéro d'essai et le champ fautif sont ce qui
+    permettra plus tard de corriger un prompt sur la base de faits plutôt
+    que d'impressions (US-201, point 7).
+    """
+    emit(
+        TaskEvent(
+            type="guardrail",
+            task_id=task_id,
+            payload={"agent": agent, "essai": essai, "champ": champ},
+        )
+    )
+
+
 def emit(event: TaskEvent) -> None:
     """Publie un événement. Une file pleine perd l'événement, jamais la tâche."""
+    if event.type not in EVENT_TYPES:
+        raise ValueError(
+            f"Type d'événement « {event.type} » hors contrat. "
+            f"Admis : {', '.join(sorted(EVENT_TYPES))}."
+        )
     file = _queues[event.task_id]
     try:
         file.put_nowait(event)
