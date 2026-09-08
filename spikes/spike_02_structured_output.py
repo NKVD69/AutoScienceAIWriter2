@@ -130,6 +130,9 @@ class PlanTree(BaseModel):
         return self
 
 
+PlanTree.model_rebuild()
+
+
 def extract_json(raw: str) -> str:
     """Extrait le premier objet équilibré. Tolérance de FORMAT, pas de CONTENU."""
     start = raw.find("{")
@@ -185,6 +188,18 @@ class Engine:
     def is_resident(self) -> bool:
         return self.model in self.loaded_models()
 
+    @staticmethod
+    def _raise_with_body(r: "httpx.Response") -> None:
+        """Fait remonter le corps de la réponse avec le code HTTP.
+
+        `raise_for_status()` seul rapporte « 400 Bad Request » et perd le
+        message du moteur, qui est la seule information utile — ici, par
+        exemple, que `response_format.type` doit valoir `json_schema`.
+        """
+        if r.is_error:
+            corps = " ".join(r.text[:400].split())
+            raise RuntimeError(f"HTTP {r.status_code} sur {r.url} : {corps}")
+
     # -- Génération -------------------------------------------------------
     def generate(self, user: str, fmt_json: bool):
         t = time.perf_counter()
@@ -201,9 +216,21 @@ class Engine:
                 "ttl": 86_400,
             }
             if fmt_json:
-                body["response_format"] = {"type": "json_object"}
+                # LM Studio n'accepte que `json_schema` ou `text` — pas le
+                # `json_object` d'OpenAI. La contrainte porte donc sur le
+                # schéma RÉEL et non sur « du JSON valide » : c'est plus fort
+                # que le `format: json` d'Ollama, et il faut le dire dans les
+                # résultats, sans quoi H2.5 comparerait deux choses inégales.
+                body["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "PlanTree",
+                        "strict": True,
+                        "schema": PlanTree.model_json_schema(),
+                    },
+                }
             r = self.client.post(f"{self.base_url}/api/v0/chat/completions", json=body)
-            r.raise_for_status()
+            self._raise_with_body(r)
             d = r.json()
             choix = (d.get("choices") or [{}])[0]
             texte = (choix.get("message") or {}).get("content") or ""
@@ -226,7 +253,7 @@ class Engine:
         if fmt_json:
             body["format"] = "json"
         r = self.client.post(f"{self.base_url}/api/generate", json=body)
-        r.raise_for_status()
+        self._raise_with_body(r)
         d = r.json()
         eval_ms = d.get("eval_duration", 0) / 1e6
         n = d.get("eval_count", 0)
@@ -283,12 +310,20 @@ def main() -> int:
         return 2
     print(f"  [OK ] {engine.model} installé")
 
-    print("\n  Préchauffage…")
-    t0 = time.perf_counter()
-    engine.generate("Réponds par le mot OK.", False)
-    print(f"  préchauffage terminé en {time.perf_counter() - t0:.1f} s")
+    # Le préchauffage n'a d'objet que si le modèle n'est pas déjà résident.
+    # En forcer un sur un modèle chargé coûte ici plusieurs minutes — le
+    # modèle raisonne avant de répondre, même à « réponds OK » — sans rien
+    # établir que l'état du modèle ne dise déjà (ADR-014).
     resident_avant = engine.is_resident()
-    print(f"  résident après préchauffage : {'oui' if resident_avant else 'non observable'}")
+    if resident_avant:
+        print("\n  Préchauffage inutile : modèle déjà résident.")
+    else:
+        print("\n  Préchauffage…")
+        t0 = time.perf_counter()
+        engine.generate("Réponds par le mot OK.", False)
+        print(f"  préchauffage terminé en {time.perf_counter() - t0:.1f} s")
+        resident_avant = engine.is_resident()
+        print(f"  résident après préchauffage : {'oui' if resident_avant else 'non observable'}")
 
     # ---- H2.6 stabilité du prompt système ------------------------------
     digest = hashlib.sha256(SYSTEM_PROMPT.encode()).hexdigest()[:12]
