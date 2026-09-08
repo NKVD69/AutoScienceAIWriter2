@@ -97,11 +97,18 @@ class Settings(BaseSettings):
         return self.lmstudio_base_url if self.llm_backend == "lmstudio" else self.ollama_base_url
 
     # --- Embeddings (ADR-013) --------------------------------------------
+    # Calculés sur CPU, hors du serveur d'inférence : l'y router chargerait
+    # le modèle sur GPU et évincerait le modèle de rédaction.
     embedding_model: str = "nomic-ai/nomic-embed-text-v1.5"
     embedding_dim: int = 768
     embedding_batch_size: int = 32
-    embedding_prefix_document: str = "search_document: "
-    embedding_prefix_query: str = "search_query: "
+    embedding_cache_dir: Path = Path("./data/models")
+    # `None` : borné automatiquement, en laissant une marge à l'interface.
+    embedding_max_workers: int | None = None
+    # ADR-010 : les poids d'embedding viennent du réseau. L'application ne
+    # les télécharge pas d'elle-même ; ce réglage porte le consentement tant
+    # qu'un enregistrement par projet n'existe pas (US-BIBLIO-001).
+    embedding_download_consent: bool = False
 
     @property
     def projects_dir(self) -> Path:

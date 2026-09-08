@@ -13,3 +13,6 @@ node_modules/
 dist/
 build/
 *.egg-info/
+
+# Modèles d embeddings et données locales (US-005) : jamais versionnés.
+data/

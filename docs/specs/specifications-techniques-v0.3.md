@@ -527,12 +527,25 @@ Porte de sortie si la RAM devient bloquante : `google/gemma-4-31b-qat` (Q4_0), i
 | `load_duration` après première requête | < 50 ms *si le moteur le publie* | détecteur de rechargement |
 | Temps au premier token | < 300 s | plafond contre un état pathologique, **ni confort ni détecteur** |
 | Recherche KNN, 50 000 chunks | < 200 ms | budget réel |
-| Ingestion, 500 chunks de 512 tokens | < 180 s (CPU 8 cœurs) | budget réel, **à revérifier** (§12.1) |
+| Ingestion, 500 chunks de 512 tokens | < 180 s (CPU 8 cœurs) | budget réel, **non tenu** — voir ci-dessous |
 | Export PDF, 150 pages | < 90 s | budget réel |
 
 Le temps au premier token **ne détecte pas un rechargement de poids** : il est dominé par le traitement du prompt, qui croît avec le contexte — 3,7 s sur une invite courte, 13,5 s sur 700 tokens, de l'ordre de 160 s attendues à 8 192 tokens. Un seuil serré se déclencherait en régime sain, un seuil large recouvrirait le coût d'un rechargement : les deux grandeurs ne se séparent pas. Le détecteur de rechargement est la **résidence du modèle** (§6.2) ; ce seuil n'est qu'un plafond.
 
 **Ordre de grandeur à connaître.** À 2,3 tokens/s — débit mesuré sur une génération complète — une section de 1 500 mots demande environ 15 minutes, un plan complet environ 25 minutes, et un mémoire de quarante sections de l'ordre de 10 heures de génération cumulée. Conséquence d'interface, non de performance : l'attente synchrone est exclue, le suivi de progression et la reprise après arrêt deviennent structurants (§2, pont SSE).
+
+**Le budget d'ingestion n'est pas tenu sur ce poste, et la cause est architecturale.** Relevé du 8 septembre 2026, `check_embeddings_cpu.py`, 500 textes d'environ 512 tokens :
+
+| Threads d'embedding | Durée | Débit |
+|---|---|---|
+| 8 | 429,6 s | 1,2 texte/s |
+| 32 | 348,2 s | 1,4 texte/s |
+
+Quadrupler les threads ne gagne que 19 % : le goulot n'est pas le parallélisme, c'est la contention. Le processus d'inférence détenait au moment de la mesure 34,7 Go de RAM et plus d'un million de secondes CPU cumulées — ADR-015 fait délibérément déverser le modèle de rédaction sur le CPU, et ADR-013 y place délibérément les embeddings. **Les deux décisions se disputent la même ressource, ce qu'aucune des deux n'avait anticipé.**
+
+Ce que la mesure n'établit pas : elle a été faite avec le modèle de rédaction résident et actif. Le budget de 180 s a été écrit pour une machine dédiée à l'ingestion. Une mesure propre exige de décharger le modèle, ce qui n'a pas été fait — cela aurait interrompu la session de travail en cours.
+
+Deux voies, à trancher lors de l'implémentation de l'ingestion : accepter une ingestion plus lente en tâche de fond, ou sérialiser explicitement ingestion et rédaction pour qu'elles ne se disputent jamais le CPU.
 
 > Le débit apparent de 0,6 token/s que rapporte `check_llm_latency.py` n'est **pas extrapolable** : sur un budget de 24 tokens, le temps d'amorce du prompt écrase le débit. Les deux mesures sont exactes ; seule leur confusion est fautive.
 

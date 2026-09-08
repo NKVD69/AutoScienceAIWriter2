@@ -177,6 +177,29 @@ class LMStudioUnavailableError(BackendUnavailableError):
         return cls(message, base_url=base_url)
 
 
+class ModelDownloadConsentRequiredError(AppError):
+    """Poids absents du cache, et consentement `model_download` non accordé.
+
+    ADR-010 : l'application ne télécharge rien d'elle-même. Elle indique quoi
+    faire, et l'utilisateur décide.
+    """
+
+    code = "CONSENT_REQUIRED"
+    status_code = 403
+
+    @classmethod
+    def for_embedding(cls, model: str, cache_dir: object) -> ModelDownloadConsentRequiredError:
+        return cls(
+            f"Le modèle d'embedding « {model} » est absent du cache "
+            f"({cache_dir}). Son téléchargement relève du consentement "
+            "model_download et n'est pas déclenché automatiquement. "
+            "Accorder le consentement par SAW_EMBEDDING_DOWNLOAD_CONSENT=true, "
+            "ou déposer le modèle dans le cache hors de l'application.",
+            scope="model_download",
+            model=model,
+        )
+
+
 class ModelNotFoundError(AppError):
     """Le modèle attendu n'est pas présent localement.
 

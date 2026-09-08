@@ -87,6 +87,7 @@ L'API est liée à la boucle locale et n'est jamais exposée sur le réseau.
 .venv/Scripts/python scripts/check_sqlite_wal.py
 .venv/Scripts/python scripts/check_sqlite_vec.py
 .venv/Scripts/python scripts/check_audit_chain.py
+.venv/Scripts/python scripts/check_embeddings_cpu.py
 .venv/Scripts/python scripts/check_no_cloud_calls.py
 .venv/Scripts/python scripts/check_llm_latency.py   # si le moteur est joignable
 ```
@@ -102,7 +103,7 @@ Quarto — sort en code 2 : ce n'est pas un échec. Un script qui sort en 1 en e
 | US-002 | Schéma SQLite unique + sqlite-vec | livrée |
 | US-003 | LLM Manager, modèle unique persistant | livrée (LM Studio + Ollama) |
 | US-701 | Journal d'audit à détection d'altération | livrée |
-| US-005 | Embeddings CPU hors Ollama | à faire |
+| US-005 | Embeddings CPU hors Ollama | livrée |
 | US-101 | CRUD projets, registre, sauvegarde | livrée |
 | US-102 | Import de sources et ingestion RAG | à faire |
 

@@ -104,7 +104,7 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | Dégradation propre sans consentement | ADR-010 | §11.3 | US-BIBLIO-001 | `test_graceful_degradation_without_consent` |
 | Angular, Dockview, Signals | ADR-011 | §2 | US-801 | `test_layout_persisted_per_project`, `test_sse_stream_to_signal_bridge` |
 | Pas de Docker | ADR-012 | §1 | Transverse | Absence de `Dockerfile` contrôlée en CI |
-| Embeddings CPU hors Ollama | ADR-013 | §6.4 | **US-005** | `test_embeddings_do_not_use_vram` |
+| Embeddings CPU hors Ollama | ADR-013 | §6.4 | **US-005** | `test_embeddings_do_not_use_vram` — VRAM mesurée à +0 Mo |
 | Préfixes nomic | ADR-013 | §6.4 | US-005 | `test_nomic_prefixes_applied` |
 | Dimension verrouillée | ADR-013 | §4.3, §6.4 | US-002, US-005 | `test_dimension_locked_against_model_config` |
 | `pyproject.toml` source unique | — | §13.1 | Transverse | `test_requirements_generated_not_edited` |
@@ -119,7 +119,7 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | **US-002** | Schéma SQLite + sqlite-vec | P0 | US-001 | ✅ `PROMPT-US-002.md` | **Livrée** |
 | US-003 | LLM Manager persistant | P0 | — | ✅ `PROMPT-US-003.md` | **Livrée** |
 | US-004 | Sandbox à deux niveaux | P0 | US-001 | ✅ `PROMPT-US-004.md` | Prêt |
-| **US-005** | Embeddings CPU hors Ollama | P0 | US-002 | ✅ `PROMPT-US-005.md` | Prêt |
+| **US-005** | Embeddings CPU hors Ollama | P0 | US-002 | ✅ `PROMPT-US-005.md` | **Livrée** |
 | **US-006** | Budget VRAM en CI | P0 | US-003, US-005 | ✅ `PROMPT-US-006.md` | Prêt |
 | US-101 | CRUD projets | P0 | US-002 | ✅ `PROMPT-US-101.md` | **Livrée** |
 | US-102 | Import sources et ingestion RAG | P0 | US-002, US-005 | ✅ `PROMPT-US-102.md` | Prêt |
