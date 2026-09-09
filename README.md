@@ -113,6 +113,15 @@ winget install --id Posit.Quarto
 quarto install tinytex
 ```
 
+La seconde commande n'est pas facultative : l'installeur ne pose pas la
+chaîne LaTeX, et sans elle le PDF échoue sur un paquet manquant. Vérifié sur
+le poste cible avec **Quarto 1.10.18** et TinyTeX (TeX Live 2026) : mémoire de
+démonstration de 3 chapitres, 8 sections, 12 figures, 5 tableaux et 20 sources
+compilé en PDF, DOCX et HTML, sans un seul renvoi ni une seule citation non
+résolus.
+
+Si le binaire n'est pas dans le `PATH`, le désigner par `SAW_QUARTO_PATH`.
+
 À chaque export, le `.bib` est **regénéré depuis la base**, à partir des
 seules citations vérifiées des sections incluses
 ([ADR-007](docs/adr/ADR-007-bibtex-dynamique.md)). Le `.bib` que vous importez

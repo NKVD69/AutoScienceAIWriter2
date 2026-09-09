@@ -227,6 +227,25 @@ def analyse_log(journal: str) -> tuple[list[str], list[str], str | None]:
 # --- Compilation ----------------------------------------------------------
 
 
+def build_arguments(binaire: Path, repertoire: Path, formats: list[str]) -> list[str]:
+    """Ligne de commande de la compilation.
+
+    **`--to` n'est pas passé, et c'est délibéré.** Sur un projet, Quarto rend
+    tous les formats déclarés dans `_quarto.yml` — que le gabarit dérive
+    précisément de `formats`. Les deux manières de nommer les formats sur la
+    ligne de commande échouent, chacune à sa façon, et toutes deux ont été
+    mesurées ici : répéter `--to` ne cumule pas, la dernière occurrence écrase
+    les précédentes et un export de trois formats n'en produisait qu'un, sans
+    erreur ni avertissement ; et `--to pdf,docx,html` est refusé net par
+    Quarto 1.10, « Unknown format ».
+
+    `formats` reste dans la signature : il n'ordonne pas la commande, mais il
+    documente ce que l'appelant demande, et un test compare la configuration
+    rendue à cette liste.
+    """
+    return [str(binaire), "render", str(repertoire)]
+
+
 async def render(
     repertoire: Path,
     formats: list[str],
@@ -239,9 +258,7 @@ async def render(
     version = await quarto_version(chemin)
     limite = timeout_s if timeout_s is not None else settings.export_timeout_seconds
 
-    arguments = [str(chemin), "render", str(repertoire)]
-    for format_demande in formats:
-        arguments += ["--to", format_demande]
+    arguments = build_arguments(chemin, repertoire, formats)
 
     debut = asyncio.get_running_loop().time()
     processus = await asyncio.create_subprocess_exec(

@@ -25,6 +25,7 @@ from app.export.quarto import (
     QuartoResult,
     QuartoUnavailableError,
     analyse_log,
+    build_arguments,
     extract_latex_error,
     find_quarto,
     find_unresolved_citations,
@@ -219,6 +220,28 @@ def test_latex_error_reported_with_context_window() -> None:
 
 def test_no_latex_error_returns_none() -> None:
     assert extract_latex_error("compilation sans incident") is None
+
+
+def test_command_line_does_not_pass_to_option() -> None:
+    """Les deux ecritures de `--to` echouent, et les deux ont ete mesurees :
+    repetee, la derniere occurrence ecrase les autres et un export de trois
+    formats n'en produisait qu'un, sans erreur ; en liste separee par des
+    virgules, Quarto 1.10 repond « Unknown format ». Ce sont les formats
+    declares dans `_quarto.yml` qui gouvernent."""
+    arguments = build_arguments(Path("quarto.exe"), Path("/export"), ["pdf", "docx", "html"])
+
+    assert "--to" not in arguments
+    assert arguments[1] == "render"
+    assert arguments[-1] == str(Path("/export"))
+
+
+def test_config_is_the_single_source_of_requested_formats() -> None:
+    """Puisque la ligne de commande ne porte plus les formats, c'est la
+    configuration qui doit les porter tous — sinon un format demande serait
+    silencieusement perdu."""
+    demandes = ["pdf", "docx", "html"]
+    config = _config(formats=demandes)
+    assert set(config["format"]) == set(demandes)
 
 
 def test_partial_result_is_not_a_success() -> None:
@@ -418,6 +441,6 @@ async def test_export_timeout_is_reported(project_db: Path, data_dir: Path) -> N
         from app.export import quarto as module_quarto
 
         with pytest.raises(AppError) as exc:
-            await module_quarto.render(repertoire, ["pdf"], timeout=1)
+            await module_quarto.render(repertoire, ["pdf"], timeout_s=1)
 
     assert "SAW_EXPORT_TIMEOUT_SECONDS" in exc.value.message
