@@ -43,7 +43,11 @@ CREATE TABLE source_document (
   file_path   TEXT,
   sha256      TEXT,
   imported_at TEXT NOT NULL,
-  approved_at TEXT
+  approved_at TEXT,
+  -- Cle publiee dans le .bib (US-501, migration 005). Attribuee au
+  -- premier export puis relue telle quelle : une cle qui change casse
+  -- les renvois d'un document deja relu.
+  bibtex_key  TEXT
 );
 
 CREATE TABLE chunk (
@@ -181,6 +185,8 @@ END;
 
 CREATE INDEX idx_source_project   ON source_document(project_id);
 CREATE INDEX idx_source_doi       ON source_document(doi);
+CREATE UNIQUE INDEX idx_source_bibtex_key ON source_document(bibtex_key)
+  WHERE bibtex_key IS NOT NULL;
 CREATE INDEX idx_chunk_source     ON chunk(source_id);
 CREATE INDEX idx_plan_node_plan   ON plan_node(plan_id, ordinal);
 CREATE INDEX idx_draft_node       ON draft_section(plan_node_id);
