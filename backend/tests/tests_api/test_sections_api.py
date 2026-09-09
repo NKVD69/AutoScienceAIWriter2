@@ -13,6 +13,7 @@ from pathlib import Path
 
 import httpx
 import pytest
+import yaml
 
 from app.agents.breaker import MAX_GUARDRAIL_RETRIES
 from app.core.config import get_settings
@@ -33,6 +34,7 @@ from tests.tests_agents.test_writer_agent import HYPOTHESE_SOURCEE, MYST, FakeBa
 NOW = datetime.now(UTC).isoformat()
 DIM = 768
 MOTS_PAR_FEUILLE = 1000
+CONTRAT = Path(__file__).resolve().parents[3] / "contracts" / "openapi.yaml"
 
 PROJET = {
     "name": "These microplastiques",
@@ -197,6 +199,40 @@ async def projet_pret(
     plan = (await client.get(f"/api/v1/projects/{pid}/plan")).json()
     feuille = plan["nodes"][0]["children"][0]["children"][0]["id"]
     return pid, conn, feuille, chunk_ids
+
+
+# --- Conformite au contrat ------------------------------------------------
+
+
+def test_section_status_matches_the_contract() -> None:
+    """`SectionStatus` reprend EXACTEMENT l'enumeration DraftSection.status.
+
+    Une seconde enumeration du meme nom existait dans models/plan.py, sans
+    GUARDRAIL ni CORRECTING : persister une section dans l'un de ces deux
+    etats aurait fait lever la LECTURE du plan. Deux enumerations partielles
+    du meme contrat finissent par diverger, ce test les empeche de renaitre.
+    """
+    schema = yaml.safe_load(CONTRAT.read_text(encoding="utf-8"))
+    attendus = schema["components"]["schemas"]["DraftSection"]["properties"]["status"]["enum"]
+    assert [e.value for e in SectionStatus] == attendus
+
+    from app.models import plan as modele_plan
+
+    assert modele_plan.SectionStatus is SectionStatus
+
+
+def test_persisted_status_also_fits_the_plan_node_enum() -> None:
+    """Le contrat decrit la MEME colonne par deux enumerations differentes :
+    DraftSection.status en compte six, PlanNode.section_status cinq — sans
+    GUARDRAIL ni CORRECTING, avec un NONE que rien n'ecrit. `plan_service`
+    reporte l'une dans l'autre, donc les etats REELLEMENT persistes doivent
+    tenir dans la plus etroite des deux. US-301 n'ecrit que REVIEWING, et
+    US-PLAN-001 que ORPHANED."""
+    schema = yaml.safe_load(CONTRAT.read_text(encoding="utf-8"))
+    noeud = schema["components"]["schemas"]["PlanNode"]["properties"]["section_status"]["enum"]
+
+    for persiste in (SectionStatus.REVIEWING, SectionStatus.ORPHANED):
+        assert persiste.value in noeud
 
 
 # --- Verrou de redaction --------------------------------------------------
