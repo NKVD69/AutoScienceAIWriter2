@@ -258,7 +258,7 @@ def test_v1_unknown_chunk_id_rejected() -> None:
 
 
 def test_v2_numeric_claim_without_chunk_rejected() -> None:
-    """Un chiffre presente comme sourcE sans extrait d'origine est un rejet.
+    """Un chiffre presente comme source sans extrait d'origine est un rejet.
 
     L'affirmation est construite SANS validation Pydantic : l'etage 1 refuse
     deja une affirmation sourcee sans chunk_id, si bien que ce cas ne peut
