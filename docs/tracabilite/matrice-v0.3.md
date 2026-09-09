@@ -44,8 +44,8 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | Notebooks Jupyter | — | US-JUP-001 | P2 | Non planifié |
 | Codes externes OpenFOAM / Serpent | §8.3 | US-CALC-001 | P2 | Non planifié |
 | Dépôt de jeux de données | §8.2 | US-DATA-001 | P1 | À implémenter |
-| Export PDF / DOCX / HTML | §9.2 | US-502 | P1 | À implémenter |
-| Bibliographie dynamique | §9.3 | US-501 | P1 | À implémenter |
+| Export PDF / DOCX / HTML | §9.2 | US-502 | P1 | **Livrée** |
+| Bibliographie dynamique | §9.3 | US-501 | P1 | **Livrée** |
 | TOC, figures, tableaux, glossaire, index | §9.4 | US-EXPORT-001 | P1 | À implémenter |
 | Modèle académique paramétrable | §9.2 | US-EXPORT-002 | P1 | À implémenter |
 | Déclaration d'usage de l'IA | §9.5 | **US-EXPORT-003** | P1 | À implémenter |
@@ -97,11 +97,19 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | Isolation disque niveau 1 | ADR-005 | §8.2 | US-004 | `test_filesystem_isolated_level1` |
 | Limites natives niveau 2 | ADR-005 | §8.3 | US-004 | `check_sandbox_windows.py`, `check_sandbox_linux.py` |
 | Consentement niveau 2 | ADR-005 | §8.1 | US-004, US-401 | `test_consent_required_level2` |
-| Quarto `.qmd` canonique | ADR-006 | §9.1 | US-502 | `test_section_stored_as_qmd` |
-| Absence de MyST canonique | ADR-006 | §9.1 | US-502 | `test_no_myst_syntax_in_canonical_content` |
-| Renvois croisés résolus | ADR-006 | §9.2 | US-502 | `test_crossrefs_resolved_in_pdf`, `check_quarto_export.py` |
-| `.bib` généré | ADR-007 | §9.3 | US-501 | `test_bibtex_contains_only_cited` |
-| Export bloqué sur citation invalide | ADR-007 | §9.3 | US-501 | `test_export_fails_on_unverified_citation` |
+| Quarto `.qmd` canonique | ADR-006 | §9.1 | **US-502** | `test_assembler_respects_plan_order`, `test_assembler_emits_stable_section_ids` |
+| Absence de MyST canonique | ADR-006 | §9.1 | **US-502** | `test_no_myst_syntax_in_assembled_document` |
+| Renvois croisés résolus | ADR-006 | §9.2 | **US-502** | `test_log_parser_detects_unresolved_crossref`, `check_quarto_export.py` |
+| `.bib` généré | ADR-007 | §9.3 | **US-501** | `test_bib_contains_only_verified_cited_sources` |
+| Export bloqué sur citation invalide | ADR-007 | §9.3 | **US-501** | `test_export_fails_on_unverified_citation_with_location` |
+| `.bib` utilisateur jamais compilé | ADR-007 | §9.3 | **US-501** | `test_user_bib_never_used_for_compilation` |
+| Clé BibTeX stable entre deux exports | ADR-007 | §9.3 | **US-501** | `test_key_persisted_and_reused_across_exports` |
+| Prépublication marquée jusqu'au rendu | ADR-007 | §9.3 | **US-501** | `test_preprint_note_present` |
+| Sortie `.bib` déterministe | ADR-007 | §9.3 | **US-501** | `test_bib_output_deterministic` |
+| Journal Quarto analysé, non relayé | ADR-006 | §9.2 | **US-502** | `test_log_parser_detects_unresolved_crossref`, `test_log_parser_detects_unresolved_citation` |
+| Erreur LaTeX avec fenêtre de contexte | ADR-006 | §9.2 | **US-502** | `test_latex_error_reported_with_context_window` |
+| Export daté jamais écrasé | ADR-006 | §9.4 | **US-502** | `test_export_artifacts_archived_and_never_overwritten` |
+| Absence de Quarto rapportée, pas subie | ADR-012 | §9.2 | **US-502** | `test_quarto_missing_raises_actionable_error` |
 | Audit à détection d'altération | ADR-009 | §11.1 | US-701 | `test_chain_valid_over_500_entries`, `test_tamper_detection_returns_index_and_id` |
 | Vocabulaire non trompeur | ADR-009 | §11.1 | US-701 | `test_wording_no_immutable_claim` |
 | Local strict par défaut | ADR-010 | §11.3 | Transverse | `check_no_cloud_calls.py` |
@@ -137,8 +145,8 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | **US-301** | Rédaction de section sourcée | P1 | US-PLAN-001, US-102 | ✅ `PROMPT-US-301.md` | **Livrée** |
 | US-302 | Relecture et score | P1 | US-301 | ✅ `PROMPT-US-302.md` | Prêt |
 | US-401 | Exécution de script | P1 | US-004 | ✅ `PROMPT-US-401.md` | Prêt |
-| US-501 | BibTeX dynamique | P1 | US-301 | ✅ `PROMPT-US-501-502.md` | Prêt |
-| US-502 | Export Quarto | P1 | US-501 | ✅ `PROMPT-US-501-502.md` | Prêt |
+| **US-501** | BibTeX dynamique | P1 | US-301 | ✅ `PROMPT-US-501-502.md` | **Livrée** |
+| **US-502** | Export Quarto | P1 | US-501 | ✅ `PROMPT-US-501-502.md` | **Livrée** |
 | US-EXPORT-003 | Déclaration d'usage de l'IA | P1 | US-701, US-502 | ✅ `PROMPT-US-EXPORT-003.md` | Prêt |
 | US-601 | Anti-plagiat avec consentement | P1 | US-502 | ✅ `PROMPT-US-601.md` | Prêt |
 | US-701 | Journal d'audit | P0 | US-001 | ✅ `PROMPT-US-701.md` | **Livrée** |
@@ -167,7 +175,7 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 
 | Risque | Test de couverture | User story |
 |---|---|---|
-| Citation inventée | `test_v1_unknown_citation_key_rejected`, `test_fabricated_reference_is_never_persisted`, `test_export_fails_on_unverified_citation` | US-301, US-501 |
+| Citation inventée | `test_v1_unknown_citation_key_rejected`, `test_fabricated_reference_is_never_persisted`, `test_export_fails_on_unverified_citation_with_location` | US-301, US-501 |
 | Statistique non sourcée | `test_v2_numeric_claim_without_chunk_rejected` | US-301 |
 | Section rédigée sans matière | `test_context_insufficient_raises_rather_than_writing` | US-301 |
 | Fuite de données du projet | `check_no_cloud_calls.py`, `test_no_consent_blocks_biblio_search` | Transverse |
@@ -177,7 +185,7 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | Perte de vecteurs orphelins | `test_cascade_delete_source_removes_vectors` | US-002 |
 | Boucle infinie d'agents | `test_circuit_breaker_pauses_review_loop` | US-202 |
 | Altération du journal | `test_tamper_detection_returns_index` | US-701 |
-| Export cassé sur 300 pages | `test_crossrefs_resolved_in_pdf` | US-502 |
+| Export cassé sur 300 pages | `check_quarto_export.py`, `test_log_parser_detects_unresolved_crossref` | US-502 |
 
 ---
 

@@ -1,0 +1,51 @@
+{# Gabarit de configuration Quarto — US-502, spécifications §9.2.
+
+   `lang` n'est pas décoratif : sans lui, « Figure », « Tableau » et
+   « Références » restent en anglais au milieu d'un mémoire français, et
+   personne ne s'en aperçoit avant l'impression.
+
+   `bibliography` pointe vers le fichier généré à CET export. Un chemin fixe
+   ferait compiler un document avec la bibliographie d'un export antérieur.
+#}
+project:
+  type: default
+  title: "{{ title }}"
+
+title: "{{ title }}"
+{% if author %}author: "{{ author }}"
+{% endif %}date: "{{ date }}"
+lang: {{ lang }}
+
+bibliography: {{ bibliography }}
+csl: {{ csl }}
+
+number-sections: true
+number-depth: {{ number_depth }}
+
+crossref:
+  fig-title: Figure
+  tbl-title: Tableau
+  sec-prefix: section
+  fig-prefix: figure
+  tbl-prefix: tableau
+
+format:
+{% if "pdf" in formats %}  pdf:
+    documentclass: report
+    papersize: a4
+    geometry:
+      - margin=2.5cm
+    toc: true
+    toc-depth: {{ toc_depth }}
+    number-sections: true
+    colorlinks: true
+{% endif %}{% if "docx" in formats %}  docx:
+    toc: true
+    toc-depth: {{ toc_depth }}
+    number-sections: true
+{% endif %}{% if "html" in formats %}  html:
+    toc: true
+    toc-depth: {{ toc_depth }}
+    number-sections: true
+    embed-resources: true
+{% endif %}

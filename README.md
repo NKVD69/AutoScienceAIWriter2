@@ -95,6 +95,37 @@ commencer : un texte écrit sans matière serait rempli de mémoire par le
 modèle, c'est-à-dire d'affirmations sans source présentées comme si elles en
 avaient une.
 
+## Export
+
+Le format canonique est **Quarto** (`.qmd`), et lui seul —
+[ADR-006](docs/adr/ADR-006-format-canonique-quarto.md). Ni MyST, ni Sphinx,
+ni repli : leurs renvois s'écrivent `{ref}` et `{numref}` là où Quarto écrit
+`@fig-`, `@tbl-`, `@sec-`, et les mélanger produit des renvois non résolus
+sur un document long.
+
+Quarto n'est pas embarqué (ADR-012, aucun conteneur) :
+
+```bash
+winget install --id Posit.Quarto
+```
+
+```bash
+quarto install tinytex
+```
+
+À chaque export, le `.bib` est **regénéré depuis la base**, à partir des
+seules citations vérifiées des sections incluses
+([ADR-007](docs/adr/ADR-007-bibtex-dynamique.md)). Le `.bib` que vous importez
+alimente vos sources ; il ne compile jamais. Une citation non vérifiée bloque
+l'export en nommant la section, la clé et le passage — elle n'est ni ignorée,
+ni incluse quand même.
+
+Chaque export écrit un répertoire daté, jamais écrasé, contenant le `.qmd`
+assemblé, la bibliographie, `_quarto.yml`, les figures, les sorties demandées
+et un rapport JSON. Le journal de Quarto est **analysé, pas seulement
+relayé** : Quarto sort en code 0 sur un document dont les renvois ne se
+résolvent pas, et le rapport les liste explicitement.
+
 ## Lancement
 
 ```bash
@@ -114,6 +145,7 @@ L'API est liée à la boucle locale et n'est jamais exposée sur le réseau.
 .venv/Scripts/python scripts/check_audit_chain.py
 .venv/Scripts/python scripts/check_embeddings_cpu.py
 .venv/Scripts/python scripts/check_no_cloud_calls.py
+.venv/Scripts/python scripts/check_quarto_export.py # code 2 si Quarto est absent
 .venv/Scripts/python scripts/check_llm_latency.py   # si le moteur est joignable
 ```
 
@@ -134,6 +166,8 @@ Quarto — sort en code 2 : ce n'est pas un échec. Un script qui sort en 1 en e
 | US-201/202 | Machine à états, guardrails, circuit breaker | livrée |
 | US-PLAN-001 | Plan : génération, édition, validation | livrée |
 | US-301 | Rédaction de section sourcée, garde-fous de véracité | livrée |
+| US-501 | Bibliographie compilée depuis les citations vérifiées | livrée |
+| US-502 | Export Quarto multi-format, journal analysé | livrée |
 
 Chemin critique complet et ordre de traitement : [`docs/plan-execution.md`](docs/plan-execution.md).
 

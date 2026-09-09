@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Style auteur-date par défaut — US-502, spécifications §9.3.
+
+  Volontairement sobre et auto-porté : il rend une bibliographie correcte
+  sans dépendre du dépôt de styles Zotero, dont le téléchargement serait un
+  appel réseau pendant l'export (ADR-010 l'interdit).
+
+  Ce n'est PAS un style normalisé. APA 7, ISO 690, Vancouver et les gabarits
+  d'établissement relèvent d'US-EXPORT-002 : un jury attend le style de son
+  école, et ce fichier ne prétend pas s'y substituer.
+
+  Le champ `note` porte le marquage de prépublication ; il est rendu en fin
+  d'entrée pour qu'un résultat non relu par les pairs ne se lise jamais comme
+  un article publié.
+-->
+<style xmlns="http://purl.org/net/xbiblio/csl" class="in-text" version="1.0"
+       default-locale="fr-FR" demote-non-dropping-particle="never">
+  <info>
+    <title>Science AI Writer — auteur-date</title>
+    <id>https://science-ai-writer.local/styles/auteur-date</id>
+    <link href="https://science-ai-writer.local/styles/auteur-date" rel="self"/>
+    <category citation-format="author-date"/>
+    <category field="generic-base"/>
+    <summary>Style auteur-date sobre, embarqué avec l'application.</summary>
+    <updated>2026-09-09T00:00:00+00:00</updated>
+  </info>
+
+  <macro name="auteur">
+    <names variable="author">
+      <name and="text" delimiter=", " initialize-with=". " name-as-sort-order="first"
+            sort-separator=", "/>
+      <substitute>
+        <names variable="editor"/>
+        <text variable="title"/>
+      </substitute>
+    </names>
+  </macro>
+
+  <macro name="auteur-court">
+    <names variable="author">
+      <name form="short" and="text" delimiter=", " initialize-with=". "/>
+      <substitute>
+        <names variable="editor"/>
+        <text variable="title" form="short"/>
+      </substitute>
+    </names>
+  </macro>
+
+  <macro name="annee">
+    <choose>
+      <if variable="issued">
+        <date variable="issued">
+          <date-part name="year"/>
+        </date>
+      </if>
+      <else>
+        <text term="no date" form="short"/>
+      </else>
+    </choose>
+  </macro>
+
+  <macro name="titre">
+    <choose>
+      <if type="book thesis report" match="any">
+        <text variable="title" font-style="italic"/>
+      </if>
+      <else>
+        <text variable="title"/>
+      </else>
+    </choose>
+  </macro>
+
+  <macro name="support">
+    <choose>
+      <if type="article-journal article-magazine" match="any">
+        <group delimiter=", ">
+          <text variable="container-title" font-style="italic"/>
+          <text variable="volume"/>
+          <text variable="page"/>
+        </group>
+      </if>
+      <else-if type="thesis">
+        <group delimiter=", ">
+          <text variable="genre"/>
+          <text variable="publisher"/>
+        </group>
+      </else-if>
+      <else>
+        <group delimiter=", ">
+          <text variable="publisher"/>
+          <text variable="container-title"/>
+        </group>
+      </else>
+    </choose>
+  </macro>
+
+  <macro name="identifiant">
+    <choose>
+      <if variable="DOI">
+        <text variable="DOI" prefix="https://doi.org/"/>
+      </if>
+      <else-if variable="URL">
+        <text variable="URL"/>
+      </else-if>
+    </choose>
+  </macro>
+
+  <citation et-al-min="3" et-al-use-first="1" disambiguate-add-year-suffix="true"
+            disambiguate-add-names="true" collapse="year">
+    <sort>
+      <key macro="auteur-court"/>
+      <key macro="annee"/>
+    </sort>
+    <layout prefix="(" suffix=")" delimiter=" ; ">
+      <group delimiter=", ">
+        <text macro="auteur-court"/>
+        <text macro="annee"/>
+      </group>
+      <group prefix=", ">
+        <label variable="locator" form="short"/>
+        <text variable="locator"/>
+      </group>
+    </layout>
+  </citation>
+
+  <bibliography hanging-indent="true" entry-spacing="1" line-spacing="1">
+    <sort>
+      <key macro="auteur"/>
+      <key macro="annee"/>
+    </sort>
+    <layout suffix=".">
+      <group delimiter=". ">
+        <text macro="auteur"/>
+        <text macro="annee"/>
+        <text macro="titre"/>
+        <text macro="support"/>
+        <text macro="identifiant"/>
+        <text variable="note"/>
+      </group>
+    </layout>
+  </bibliography>
+</style>

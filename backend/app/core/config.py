@@ -127,6 +127,21 @@ class Settings(BaseSettings):
     chunk_tokens: int = 512
     chunk_overlap: int = 64
 
+    # --- Export (US-501, US-502, ADR-006) ---------------------------------
+    # `None` : cherché dans le PATH. Quarto n'est pas empaqueté avec
+    # l'application (ADR-012, pas de conteneur) ; son absence est un état
+    # normal, rapporté avec une procédure d'installation.
+    quarto_path: Path | None = None
+    # 1.4 introduit le rendu de `_quarto.yml` en projet `book` avec crossref
+    # stable ; en deçà, les renvois d'un document de 300 pages se perdent.
+    quarto_min_version: str = "1.4.0"
+    # Une thèse de 300 pages compile en plusieurs minutes, LaTeX faisant
+    # deux à trois passes. Un timeout serré tuerait une compilation saine.
+    export_timeout_seconds: int = 600
+    # Fenêtre de journal rendue autour d'une erreur LaTeX. Transmettre les
+    # 4 000 lignes brutes n'apprend rien à personne.
+    export_log_context_lines: int = 20
+
     @property
     def projects_dir(self) -> Path:
         return self.data_dir / "projects"
@@ -144,6 +159,14 @@ class Settings(BaseSettings):
     @property
     def backups_dir(self) -> Path:
         return self.data_dir / "backups"
+
+    def exports_dir(self, project_id: int) -> Path:
+        """Racine des exports d'un projet. Un sous-répertoire daté par export.
+
+        Jamais écrasée : chaque répertoire est la preuve de ce qui a été
+        produit à une date, et un mémoire se relit sur des mois.
+        """
+        return self.data_dir / "exports" / str(project_id)
 
 
 @lru_cache(maxsize=1)

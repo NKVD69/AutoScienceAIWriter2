@@ -23,6 +23,10 @@ dependencies = [
   "pymupdf>=1.24",
   "fastembed>=0.3",
   "langgraph>=0.2",
+  # Gabarit de _quarto.yml (US-502). Le fichier de configuration d'une
+  # compilation Quarto porte des listes conditionnelles - formats demandes,
+  # metadonnees absentes - qu'une substitution de chaines rendrait illisible.
+  "jinja2>=3.1",
   # Aucun paquet client de moteur d'inférence (§13.1) : LM Studio et Ollama
   # sont deux API HTTP locales, appelées directement par httpx. Une
   # dépendance de plus ne ferait qu'ajouter un couplage sur le chemin le
