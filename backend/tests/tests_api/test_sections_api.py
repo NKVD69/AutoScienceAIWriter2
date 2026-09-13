@@ -73,14 +73,30 @@ class ServiceEspion:
         return axe(1.0)
 
 
+def texte_de_longueur(mots: int, debut: str) -> str:
+    """Contenu dont la longueur MESUREE atteint `mots`.
+
+    Le controle de longueur compte les mots du texte, et non plus le
+    `word_count` declare par le modele : une reponse de dix mots annoncee a
+    mille etait acceptee. Le remplissage ne porte ni chiffre, ni URL, ni cle,
+    pour que seul le defaut vise par chaque test declenche un rejet.
+    """
+    phrase = "Le propos se developpe ici de maniere argumentee et prudente.".split()
+    tete = debut.split()
+    restant = max(0, mots - len(tete))
+    remplissage = (phrase * (restant // len(phrase) + 1))[:restant]
+    return " ".join(tete + remplissage)
+
+
 def reponse_valide(chunk_id: int, mots: int = MOTS_PAR_FEUILLE) -> str:
     """Sortie conforme : une affirmation sourcee, une limite, un DOI connu."""
     return json.dumps(
         {
-            "content_qmd": (
+            "content_qmd": texte_de_longueur(
+                mots,
                 f"La filtration decroit apres exposition prolongee [@{CLE_1}]. "
                 f"Les cohortes urbaines confirment la tendance [@{CLE_2}]. "
-                f"Voir {DOI_CONNU}."
+                f"Voir {DOI_CONNU}.",
             ),
             "claims": [
                 {
@@ -103,7 +119,9 @@ def reponse_valide(chunk_id: int, mots: int = MOTS_PAR_FEUILLE) -> str:
 def reponse_cle_inventee(chunk_id: int) -> str:
     return json.dumps(
         {
-            "content_qmd": "La filtration decroit [@src9_2020_inventee].",
+            "content_qmd": texte_de_longueur(
+                MOTS_PAR_FEUILLE, "La filtration decroit [@src9_2020_inventee]."
+            ),
             "claims": [
                 {
                     "text": "La filtration decroit.",
@@ -121,7 +139,10 @@ def reponse_cle_inventee(chunk_id: int) -> str:
 def reponse_doi_invente(chunk_id: int) -> str:
     return json.dumps(
         {
-            "content_qmd": f"La filtration decroit [@{CLE_1}], cf. 10.9999/inexistant.2024.001.",
+            "content_qmd": texte_de_longueur(
+                MOTS_PAR_FEUILLE,
+                f"La filtration decroit [@{CLE_1}], cf. 10.9999/inexistant.2024.001.",
+            ),
             "claims": [
                 {
                     "text": "La filtration decroit.",
@@ -478,3 +499,63 @@ async def test_rejection_is_audited(
         "SELECT count(*) FROM audit_log WHERE event_type = 'GUARDRAIL_TRIGGERED'"
     ) as cur:
         assert int((await cur.fetchone())[0]) == 1
+
+
+# --- Constats de revue ----------------------------------------------------
+
+
+async def test_validation_error_matches_contract_shape(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Le contrat decrit toute reponse 422 par le schema `Error` : `code` et
+    `message` obligatoires. FastAPI repondait `{"detail": [...]}` : le message
+    ADR-006 sur MyST n'atteignait aucun client code contre le contrat."""
+    pid, conn, feuille, chunk_ids = await projet_pret(client)
+    brancher_modele(monkeypatch, [reponse_valide(chunk_ids[0])])
+    await client.post(f"/api/v1/projects/{pid}/sections/{feuille}/draft")
+    section_id = (await section_service.versions_of(conn, feuille))[0]
+
+    r = await client.put(
+        f"/api/v1/projects/{pid}/sections/{section_id}",
+        json={"content_qmd": ":::{note}\nUn encadre MyST.\n:::"},
+    )
+
+    assert r.status_code == 422
+    corps = r.json()
+    assert corps["code"] == "VALIDATION_FAILED"
+    assert "MyST" in corps["message"]
+    assert "detail" not in corps
+
+
+async def test_concurrent_drafts_get_distinct_versions(client: httpx.AsyncClient) -> None:
+    """Des enregistrements simultanes sur la connexion partagee du projet
+    produisaient soit un 500 brut, soit plusieurs versions n° 1 du meme noeud
+    — dont l'export retenait l'une au hasard. Constat de revue, reproduit."""
+    import asyncio
+
+    from app.models.section import Claim, SectionDraft
+    from app.rag.context_builder import SectionContext
+
+    pid, conn, feuille, _ = await projet_pret(client)
+    contexte = SectionContext(
+        node_id=feuille,
+        node_title="Noeud",
+        node_objective="Objectif",
+        target_words=1000,
+        query="requete",
+        chunks=[],
+        allowed_keys=[],
+        token_estimate=0,
+    )
+    brouillon = SectionDraft(
+        content_qmd="Texte.",
+        claims=[Claim(text="Point de synthese.", kind="synthesis")],
+        word_count=1,
+    )
+
+    ids = await asyncio.gather(
+        *(section_service.save_draft(conn, pid, feuille, brouillon, contexte) for _ in range(4))
+    )
+
+    versions = sorted([(await section_service.get(conn, i)).version for i in ids])
+    assert versions == [1, 2, 3, 4]

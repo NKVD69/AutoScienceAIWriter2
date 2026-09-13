@@ -57,12 +57,14 @@ async def save_tree(
     touchées. Un plan est un objet de travail, et revenir sur une version
     précédente est un geste normal.
     """
-    async with conn.execute(
-        "SELECT COALESCE(MAX(version), 0) FROM plan WHERE project_id = ?", (project_id,)
-    ) as cur:
-        version = int((await cur.fetchone())[0]) + 1
-
     async with transaction(conn):
+        # Lu dans la transaction : lu avant, deux enregistrements simultanés
+        # obtenaient le même numéro de version (même défaut que les sections).
+        async with conn.execute(
+            "SELECT COALESCE(MAX(version), 0) FROM plan WHERE project_id = ?", (project_id,)
+        ) as lecture:
+            version = int((await lecture.fetchone())[0]) + 1
+
         cur = await conn.execute(
             "INSERT INTO plan (project_id, problematique, status, version, created_at)"
             " VALUES (?, ?, ?, ?, ?)",

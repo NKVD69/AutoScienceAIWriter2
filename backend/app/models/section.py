@@ -32,6 +32,10 @@ MYST_PATTERNS = (
 
 WORD_COUNT_LOW = 0.6
 WORD_COUNT_HIGH = 1.4
+# Un mot : une suite de caractères sans blanc. Le balisage Quarto — dièses de
+# titre, clés de citation — compte comme des mots : l'écart reste négligeable
+# devant une fourchette de plus ou moins 40 %.
+WORD = re.compile(r"\S+")
 
 
 class ClaimKind(StrEnum):
@@ -111,17 +115,27 @@ class SectionDraft(BaseModel):
             )
         return self
 
+    def measured_word_count(self) -> int:
+        """Mots réellement présents dans le contenu."""
+        return len(WORD.findall(self.content_qmd))
+
     def check_word_count(self, target_words: int) -> None:
-        """Contrôle la longueur contre la cible du nœud de plan.
+        """Contrôle la longueur MESURÉE contre la cible du nœud de plan.
+
+        Le `word_count` déclaré par le modèle n'est pas consulté. Un contrôle
+        qui le croirait sur parole laisserait passer cinq mots annoncés comme
+        1 500 — c'est-à-dire un garde-fou qui demande au modèle de juger sa
+        propre production, ce que §5.5 exclut (constat de revue).
 
         Séparé des validateurs : la cible appartient au plan, et un modèle
         Pydantic ne doit pas dépendre d'un contexte extérieur.
         """
+        mesure = self.measured_word_count()
         bas = int(target_words * WORD_COUNT_LOW)
         haut = int(target_words * WORD_COUNT_HIGH)
-        if not bas <= self.word_count <= haut:
+        if not bas <= mesure <= haut:
             raise ValueError(
-                f"Longueur : {self.word_count} mots pour une cible de "
+                f"Longueur : {mesure} mots pour une cible de "
                 f"{target_words} (fourchette admise de {bas} a {haut}). "
                 "Développe ou resserre la section."
             )

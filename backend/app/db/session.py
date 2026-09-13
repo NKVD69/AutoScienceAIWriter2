@@ -16,9 +16,12 @@ ADR-001. Trois règles portent ce module :
 
 from __future__ import annotations
 
+import asyncio
 import shutil
+import weakref
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 import aiosqlite
@@ -110,6 +113,26 @@ async def connect(
         await conn.close()
 
 
+# Un verrou par connexion. Référence faible : une connexion fermée et oubliée
+# ne doit pas être retenue en vie par son verrou.
+_verrous: weakref.WeakKeyDictionary[aiosqlite.Connection, asyncio.Lock] = (
+    weakref.WeakKeyDictionary()
+)
+# Connexions dont le contexte d'exécution courant tient la transaction. asyncio
+# copie le contexte dans les tâches enfants : une transaction ouverte depuis une
+# tâche née à l'intérieur d'une autre est donc reconnue comme imbriquée, au lieu
+# d'attendre un verrou que la tâche parente ne rendra jamais.
+_tenues: ContextVar[frozenset[int]] = ContextVar("transactions_tenues", default=frozenset())
+
+
+def _verrou(conn: aiosqlite.Connection) -> asyncio.Lock:
+    verrou = _verrous.get(conn)
+    if verrou is None:
+        verrou = asyncio.Lock()
+        _verrous[conn] = verrou
+    return verrou
+
+
 @asynccontextmanager
 async def transaction(conn: aiosqlite.Connection) -> AsyncIterator[aiosqlite.Connection]:
     """Transaction explicite : toute opération multi-tables passe par ici (ADR-001).
@@ -126,15 +149,39 @@ async def transaction(conn: aiosqlite.Connection) -> AsyncIterator[aiosqlite.Con
     d'audit — lire le dernier hash, puis insérer — et la promesse d'ADR-001
     (« `busy_timeout` absorbe la contention en écriture ») ne tient que si
     le verrou d'écriture est pris dès l'ouverture.
+
+    **Les transactions d'une même connexion se succèdent.** Une connexion
+    projet est partagée par toutes les requêtes (US-101), et SQLite porte
+    l'état transactionnel sur la connexion, pas sur l'appelant. Deux
+    coroutines ouvrant chacune une transaction faisaient échouer la seconde
+    en « cannot start a transaction within a transaction » — ou, décalées
+    d'un souffle, lisaient une valeur périmée et dupliquaient une écriture
+    (constat de revue, reproduit). Ce n'est pas la file d'écriture qu'ADR-001
+    proscrit : un verrou asyncio suspend la coroutine qui attend, il ne
+    bloque pas la boucle d'événements, et la contention entre connexions
+    distinctes reste l'affaire de WAL et de `busy_timeout`.
     """
-    await conn.execute("BEGIN IMMEDIATE")
-    try:
-        yield conn
-    except BaseException:
-        await conn.rollback()
-        raise
-    else:
-        await conn.commit()
+    cle = id(conn)
+    if cle in _tenues.get():
+        raise RuntimeError(
+            "Transaction imbriquée sur la même connexion. SQLite n'imbrique pas les "
+            "transactions, et ouvrir la seconde attendrait indéfiniment la fin de la "
+            "première. Passer à l'appelé la transaction déjà ouverte (paramètre tx=True)."
+        )
+
+    async with _verrou(conn):
+        jeton = _tenues.set(_tenues.get() | {cle})
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            try:
+                yield conn
+            except BaseException:
+                await conn.rollback()
+                raise
+            else:
+                await conn.commit()
+        finally:
+            _tenues.reset(jeton)
 
 
 async def checkpoint(conn: aiosqlite.Connection) -> None:

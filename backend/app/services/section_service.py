@@ -175,13 +175,16 @@ async def save_draft(
     status: SectionStatus = SectionStatus.REVIEWING,
 ) -> int:
     """Écrit une nouvelle version de la section et ses citations vérifiées."""
-    async with conn.execute(
-        "SELECT COALESCE(MAX(version), 0) FROM draft_section WHERE plan_node_id = ?",
-        (node_id,),
-    ) as cur:
-        version = int((await cur.fetchone())[0]) + 1
-
     async with transaction(conn):
+        # Lu DANS la transaction. Lu avant, un autre enregistrement du même
+        # nœud pouvait s'intercaler et obtenir le même numéro : deux versions
+        # n° 1, dont l'export retenait l'une au hasard (constat de revue).
+        async with conn.execute(
+            "SELECT COALESCE(MAX(version), 0) FROM draft_section WHERE plan_node_id = ?",
+            (node_id,),
+        ) as lecture:
+            version = int((await lecture.fetchone())[0]) + 1
+
         cur = await conn.execute(
             "INSERT INTO draft_section (plan_node_id, content_qmd, status, version,"
             " generated_at) VALUES (?, ?, ?, ?, ?)",
@@ -204,14 +207,19 @@ async def save_draft(
                 "section_id": section_id,
                 "plan_node_id": node_id,
                 "version": version,
-                "mots": draft.word_count,
+                # Mesurés, pas déclarés : le journal ne recopie pas un nombre
+                # que le modèle aurait pu inventer.
+                "mots": draft.measured_word_count(),
                 "affirmations": len(draft.claims),
                 "sourcees": len(draft.sourced_claims()),
             },
             tx=True,
         )
     logger.info(
-        "Section %s enregistrée en version %s (%s mots)", section_id, version, draft.word_count
+        "Section %s enregistrée en version %s (%s mots)",
+        section_id,
+        version,
+        draft.measured_word_count(),
     )
     return section_id
 

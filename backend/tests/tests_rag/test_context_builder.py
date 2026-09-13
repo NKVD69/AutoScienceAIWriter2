@@ -309,3 +309,32 @@ def test_select_under_budget_keeps_the_closest_first() -> None:
     retenus = context_builder.select_under_budget(hits, budget_tokens=100)
 
     assert [h.chunk_id for h in retenus] == [2]
+
+
+def test_bibtex_key_transliterates_accents() -> None:
+    """Les titres francais commencent souvent par une capitale accentuee.
+    Supprimer les lettres non ASCII au lieu de les translitterer donnait
+    `tude` pour « Étude », et sautait « État » entier : la cle montree au
+    redacteur, et citee dans les rejets V1, devenait illisible. Constat de
+    revue, reproduit."""
+    from app.db.vector import ChunkHit
+
+    def cle(titre: str) -> str:
+        return bibtex_key(
+            ChunkHit(
+                chunk_id=1,
+                source_id=3,
+                text="x",
+                page_start=1,
+                page_end=1,
+                distance=0.0,
+                source_title=titre,
+                source_year=2021,
+                source_doi=None,
+                is_preprint=False,
+            )
+        )
+
+    assert cle("Étude de la filtration rénale") == "src3_2021_etude"
+    assert cle("État des lieux clinique") == "src3_2021_etat"
+    assert cle("Évaluation médicale") == "src3_2021_evaluation"

@@ -122,6 +122,13 @@ résolus.
 
 Si le binaire n'est pas dans le `PATH`, le désigner par `SAW_QUARTO_PATH`.
 
+**Sous Windows, gardez `SAW_DATA_DIR` court.** Quarto ouvre des fichiers de
+session sous le répertoire d'export ; au-delà de 260 caractères ils ne s'ouvrent
+pas, et activer les chemins longs de Windows n'y change rien (mesuré). L'export
+est donc refusé avant compilation, avec la longueur atteinte, dès que le
+répertoire de données dépasse environ 150 caractères — ce qui arrive vite avec
+un profil redirigé vers OneDrive.
+
 À chaque export, le `.bib` est **regénéré depuis la base**, à partir des
 seules citations vérifiées des sections incluses
 ([ADR-007](docs/adr/ADR-007-bibtex-dynamique.md)). Le `.bib` que vous importez

@@ -34,7 +34,7 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | Synchronisation Zotero | §10 | US-ZOTERO-001 | P2 | Non planifié |
 | Base de connaissances vectorielle | §4.3, §7 | US-002, US-102 | P0 | **Livrée** |
 | Filtres avancés du RAG | §7.2, §7.3 | US-RAG-002 | P1 | À implémenter |
-| Génération de problématique et de plan | §5.2 | **US-PLAN-001** | **P0** | À implémenter |
+| Génération de problématique et de plan | §5.2 | **US-PLAN-001** | **P0** | **Livrée** |
 | Édition et validation du plan | §5.2 | US-PLAN-001 | P0 | **Livrée** |
 | Rédaction de section sourcée | §5.4, §5.5 | US-301 | P1 | **Livrée** |
 | Relecture et score de qualité | §5.4 | US-302 | P1 | À implémenter |
@@ -110,6 +110,13 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | Erreur LaTeX avec fenêtre de contexte | ADR-006 | §9.2 | **US-502** | `test_latex_error_reported_with_context_window` |
 | Export daté jamais écrasé | ADR-006 | §9.4 | **US-502** | `test_export_artifacts_archived_and_never_overwritten` |
 | Absence de Quarto rapportée, pas subie | ADR-012 | §9.2 | **US-502** | `test_quarto_missing_raises_actionable_error` |
+| Configuration Quarto non injectable | ADR-010 | §9.2 | **US-502** | `test_quarto_yml_survives_any_project_name`, `test_quarto_yml_refuses_an_invalid_project_language` |
+| Requête d'export bornée au contrat | ADR-010 | §9.2 | **US-502** | `test_export_request_rejects_template_outside_the_templates_dir`, `test_export_rejects_requests_outside_the_contract` |
+| Délai de compilation borné, arbre de processus tué | ADR-012 | §9.2 | **US-502** | `test_timeout_kills_the_whole_process_tree` |
+| Chemin d'export trop long refusé avant compilation | ADR-012 | §9.2 | **US-502** | `test_path_budget_refuses_directories_quarto_cannot_open`, `test_prepare_refuses_a_data_dir_too_long_for_quarto` |
+| Transactions sérialisées sur connexion partagée | ADR-001 | §4.5 | US-001, US-101 | `test_concurrent_transactions_on_shared_connection_are_serialized`, `test_project_writes_go_through_transaction` |
+| Longueur de section mesurée, non déclarée | ADR-008 | §5.5 | **US-301** | `test_word_count_is_measured_not_declared` |
+| Erreurs 422 au format du contrat | — | — | Transverse | `test_validation_error_matches_contract_shape` |
 | Audit à détection d'altération | ADR-009 | §11.1 | US-701 | `test_chain_valid_over_500_entries`, `test_tamper_detection_returns_index_and_id` |
 | Vocabulaire non trompeur | ADR-009 | §11.1 | US-701 | `test_wording_no_immutable_claim` |
 | Local strict par défaut | ADR-010 | §11.3 | Transverse | `check_no_cloud_calls.py` |
@@ -186,6 +193,9 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | Boucle infinie d'agents | `test_circuit_breaker_pauses_review_loop` | US-202 |
 | Altération du journal | `test_tamper_detection_returns_index` | US-701 |
 | Export cassé sur 300 pages | `check_quarto_export.py`, `test_log_parser_detects_unresolved_crossref` | US-502 |
+| Exécution de commande via un projet reçu d'un tiers | `test_quarto_yml_survives_any_project_name`, `test_quarto_yml_refuses_an_invalid_project_language` | US-502 |
+| Versions de section dupliquées sous concurrence | `test_concurrent_drafts_get_distinct_versions` | US-301 |
+| Compilation sans fin, processus orphelins | `test_timeout_kills_the_whole_process_tree` | US-502 |
 
 ---
 

@@ -21,6 +21,7 @@ from datetime import UTC, datetime
 import aiosqlite
 
 from app.core.logging import get_logger
+from app.db.session import transaction
 from app.models.source import Task, TaskEvent, TaskState
 
 logger = get_logger(__name__)
@@ -44,14 +45,19 @@ async def create(
     state: TaskState,
     agent: str | None = None,
 ) -> Task:
-    """Crée une tâche. L'appelant ouvre la transaction s'il en a besoin."""
+    """Crée une tâche, dans sa propre transaction.
+
+    Jamais par un `commit()` nu : sur la connexion partagée du projet, il
+    validerait la transaction qu'une autre coroutine a laissée ouverte — en
+    publiant la moitié, sans que le `rollback` qui suivrait puisse l'annuler.
+    """
     maintenant = _now()
-    cur = await conn.execute(
-        "INSERT INTO task (project_id, state, agent, payload_json, retry_count,"
-        " created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?)",
-        (project_id, str(state), agent, json.dumps({"progress": 0.0}), maintenant, maintenant),
-    )
-    await conn.commit()
+    async with transaction(conn):
+        cur = await conn.execute(
+            "INSERT INTO task (project_id, state, agent, payload_json, retry_count,"
+            " created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?)",
+            (project_id, str(state), agent, json.dumps({"progress": 0.0}), maintenant, maintenant),
+        )
     return Task(
         id=int(cur.lastrowid or 0),
         project_id=project_id,
@@ -106,11 +112,12 @@ async def update(
         charge["last_error"] = actuelle.last_error
 
     nouvel_etat = state or actuelle.state
-    await conn.execute(
-        "UPDATE task SET state = ?, payload_json = ?, updated_at = ? WHERE id = ?",
-        (str(nouvel_etat), json.dumps(charge), _now(), task_id),
-    )
-    await conn.commit()
+    # Transaction propre, pour la même raison que `create`.
+    async with transaction(conn):
+        await conn.execute(
+            "UPDATE task SET state = ?, payload_json = ?, updated_at = ? WHERE id = ?",
+            (str(nouvel_etat), json.dumps(charge), _now(), task_id),
+        )
 
     if state is not None and state != actuelle.state:
         emit(TaskEvent(type="state", task_id=task_id, payload={"state": str(state)}))

@@ -18,6 +18,7 @@ affirmations sans source, présentées comme si elles en avaient une.
 from __future__ import annotations
 
 import re
+import unicodedata
 
 import aiosqlite
 from pydantic import BaseModel
@@ -79,8 +80,14 @@ def bibtex_key(hit: ChunkHit) -> str:
 
     Déterministe : la même source produit toujours la même clé, sinon le
     `.bib` généré à l'export ne correspondrait plus au texte.
+
+    Les accents sont translittérés, pas supprimés : supprimer faisait de
+    « Étude » un `tude` et sautait « État » entier, dans une clé montrée au
+    rédacteur et citée dans ses rejets (constat de revue).
     """
-    titre = re.sub(r"[^a-z0-9 ]", "", hit.source_title.lower())
+    decompose = unicodedata.normalize("NFKD", hit.source_title)
+    sans_accent = "".join(c for c in decompose if not unicodedata.combining(c))
+    titre = re.sub(r"[^a-z0-9 ]", "", sans_accent.lower())
     mots = [m for m in titre.split() if len(m) > 3]
     motcle = mots[0] if mots else "source"
     annee = hit.source_year or "nd"

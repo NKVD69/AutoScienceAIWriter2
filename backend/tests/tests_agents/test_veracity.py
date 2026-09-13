@@ -152,21 +152,40 @@ def test_myst_syntax_rejected_in_content() -> None:
     assert draft("::: {.callout-note}\nUn encadre Quarto.\n:::", [valide])
 
 
+def texte_de(n: int) -> str:
+    """Texte d'exactement `n` mots, sans chiffre ni cle."""
+    return " ".join(["mot"] * n)
+
+
 def test_word_count_out_of_range_rejected() -> None:
     """Une section de 300 mots pour une cible de 1500 n'est pas une section
     courte : c'est un plan qui ne tient pas."""
     valide = Claim(text="Point de synthese.", kind="synthesis")
 
     with pytest.raises(ValueError) as trop_court:
-        draft("Texte.", [valide], mots=300).check_word_count(1500)
+        draft(texte_de(300), [valide], mots=300).check_word_count(1500)
     assert "300" in str(trop_court.value) and "1500" in str(trop_court.value)
 
     with pytest.raises(ValueError):
-        draft("Texte.", [valide], mots=2500).check_word_count(1500)
+        draft(texte_de(2500), [valide], mots=2500).check_word_count(1500)
 
     # Dans la fourchette 0,6 - 1,4 : accepte.
-    draft("Texte.", [valide], mots=1000).check_word_count(1500)
-    draft("Texte.", [valide], mots=2000).check_word_count(1500)
+    draft(texte_de(1000), [valide], mots=1000).check_word_count(1500)
+    draft(texte_de(2000), [valide], mots=2000).check_word_count(1500)
+
+
+def test_word_count_is_measured_not_declared() -> None:
+    """Le controle comparait a la cible le `word_count` DECLARE par le modele,
+    sans jamais mesurer le texte : cinq mots annonces comme 1 500 passaient.
+    C'est un controle qui croit le modele sur parole — exactement ce que les
+    garde-fous de §5.5 excluent. Constat de revue, reproduit."""
+    valide = Claim(text="Point de synthese.", kind="synthesis")
+
+    with pytest.raises(ValueError):
+        draft("Texte tres court, cinq mots.", [valide], mots=1500).check_word_count(1500)
+
+    # A l'inverse, un compte declare faux n'empeche pas un texte conforme.
+    draft(texte_de(1500), [valide], mots=5).check_word_count(1500)
 
 
 # --- V1 : cle hors liste blanche ------------------------------------------
@@ -372,6 +391,26 @@ async def test_v3_known_doi_accepted(conn) -> None:
         [Claim(text="Point de synthese.", kind="synthesis")],
     )
     assert await check_identifiers(conn, section) == []
+
+
+async def test_v3_url_quoted_in_french_style_is_accepted(conn) -> None:
+    """Une URL citee entre guillemets sortait de l'expression reguliere avec
+    le guillemet fermant colle a sa fin : elle ne correspondait plus a l'URL
+    importee, et une citation correcte etait rejetee — jusqu'a epuiser les
+    trois essais du disjoncteur. Constat de revue, reproduit."""
+    ouvrant, fermant = chr(0x201C), chr(0x201D)
+    for citation in (
+        f"«{URL_CONNUE}»",
+        f"« {URL_CONNUE} »",
+        f"{ouvrant}{URL_CONNUE}{fermant}",
+        f'"{URL_CONNUE}"',
+        f"'{URL_CONNUE}'",
+    ):
+        section = draft(
+            f"Les donnees sont decrites dans {citation}.",
+            [Claim(text="Point de synthese.", kind="synthesis")],
+        )
+        assert await check_identifiers(conn, section) == [], citation
 
 
 async def test_v3_unknown_url_rejected(conn) -> None:

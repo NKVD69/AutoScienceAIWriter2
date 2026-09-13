@@ -155,3 +155,82 @@ def test_application_code_never_imports_sqlite3() -> None:
             elif isinstance(noeud, ast.ImportFrom) and noeud.module == "sqlite3":
                 fautes.append(f"{path.relative_to(app_root)}:{noeud.lineno}")
     assert not fautes, "import sqlite3 dans le code applicatif :\n" + "\n".join(fautes)
+
+
+# --- Connexion partagee : constats de revue --------------------------------
+
+
+async def test_concurrent_transactions_on_shared_connection_are_serialized(
+    project_db: Path,
+) -> None:
+    """Une connexion projet est PARTAGEE par toutes les requetes (US-101).
+
+    Deux coroutines ouvrant `transaction()` sur la meme connexion faisaient
+    echouer la seconde par « cannot start a transaction within a transaction »,
+    erreur brute remontee en 500 — ou, decalees d'un souffle, lisaient une
+    valeur perimee et dupliquaient une ecriture. Les transactions doivent se
+    succeder.
+    """
+    await _seed(project_db)
+    async with connect(project_db) as conn:
+        await conn.execute("INSERT INTO parent (id, label) VALUES (1, 'racine')")
+        await conn.commit()
+
+        async def ecrivain() -> None:
+            async with transaction(conn):
+                async with conn.execute("SELECT count(*) FROM child") as cur:
+                    avant = (await cur.fetchone())[0]
+                # Suspension au milieu de la transaction : c'est la que
+                # l'autre coroutine s'intercalait.
+                await asyncio.sleep(0)
+                await conn.execute(
+                    "INSERT INTO child (parent_id, value) VALUES (1, ?)", (f"v{avant}",)
+                )
+
+        await asyncio.wait_for(asyncio.gather(*(ecrivain() for _ in range(8))), timeout=30)
+
+        async with conn.execute("SELECT count(*), count(DISTINCT value) FROM child") as cur:
+            total, distincts = await cur.fetchone()
+    # Serialisees, les huit transactions voient chacune le compte laisse par la
+    # precedente : aucune lecture perimee, donc aucune valeur en double.
+    assert (total, distincts) == (8, 8)
+
+
+async def _ouvrir_une_seconde_transaction(conn: aiosqlite.Connection) -> None:
+    async with transaction(conn):
+        pass
+
+
+async def test_nested_transaction_on_same_connection_fails_clearly(project_db: Path) -> None:
+    """Imbriquer deux transactions sur la meme connexion est un defaut d'appel.
+    Avec un verrou, il deviendrait un interblocage silencieux : il doit au
+    contraire lever tout de suite, en disant pourquoi — y compris depuis une
+    tache enfant, comme celle que cree `asyncio.wait_for`."""
+    await _seed(project_db)
+    async with connect(project_db) as conn:
+        with pytest.raises(RuntimeError, match="imbriqu"):
+            async with transaction(conn):
+                await asyncio.wait_for(_ouvrir_une_seconde_transaction(conn), timeout=5)
+
+
+def test_project_writes_go_through_transaction() -> None:
+    """Sur une connexion partagee, un `commit()` emis hors `transaction()`
+    VALIDE la transaction qu'une autre coroutine a laissee ouverte : il en
+    publie la moitie, et le `rollback` qui suivrait n'annulerait plus rien.
+
+    Seuls le module de session, le registre (base distincte, une connexion
+    par appel) et les migrations (appliquees avant tout partage) appellent
+    `commit()` directement.
+    """
+    import re
+
+    app_root = Path(__file__).resolve().parents[2] / "app"
+    autorises = {Path("db/session.py"), Path("db/registry.py"), Path("db/migrations/runner.py")}
+    fautes = [
+        f"{path.relative_to(app_root)}:{numero}"
+        for path in sorted(app_root.rglob("*.py"))
+        if path.relative_to(app_root) not in autorises
+        for numero, ligne in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1)
+        if re.search(r"\.commit\(\)", ligne)
+    ]
+    assert not fautes, "commit() hors transaction() :\n" + "\n".join(fautes)

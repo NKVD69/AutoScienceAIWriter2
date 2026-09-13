@@ -451,17 +451,19 @@ async def build_bibliography(
         raise UnverifiedCitationError(bloquantes)
 
     sources = await cited_sources(conn, section_ids)
-    deja = await existing_keys(conn)
-    clefs = assign_keys(sources, deja)
-
-    nouvelles = {sid: cle for sid, cle in clefs.items() if sid not in deja}
+    # Lecture, attribution et écriture dans une seule transaction : séparées,
+    # deux exports simultanés calculaient la même clé pour une source nouvelle,
+    # et le second butait sur l'index UNIQUE en erreur brute.
+    async with transaction(conn):
+        deja = await existing_keys(conn)
+        clefs = assign_keys(sources, deja)
+        nouvelles = {sid: cle for sid, cle in clefs.items() if sid not in deja}
+        for source_id, clef in sorted(nouvelles.items()):
+            await conn.execute(
+                "UPDATE source_document SET bibtex_key = ? WHERE id = ?",
+                (clef, source_id),
+            )
     if nouvelles:
-        async with transaction(conn):
-            for source_id, clef in sorted(nouvelles.items()):
-                await conn.execute(
-                    "UPDATE source_document SET bibtex_key = ? WHERE id = ?",
-                    (clef, source_id),
-                )
         logger.info("%s clé(s) BibTeX attribuée(s)", len(nouvelles))
 
     entrees = [e.model_copy(update={"key": clefs[e.source_id]}) for e in sources]

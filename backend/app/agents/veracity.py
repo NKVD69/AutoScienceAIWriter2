@@ -38,7 +38,14 @@ BARE_KEY = re.compile(r"(?<![A-Za-z0-9])@([A-Za-z][A-Za-z0-9_:.-]{2,})")
 CROSSREF_PREFIXES = ("fig-", "tbl-", "eq-", "sec-", "lst-", "thm-")
 
 DOI = re.compile(r"\b10\.\d{4,9}/[-._;()/:A-Za-z0-9]+\b")
-URL = re.compile(r"https?://[^\s\)\]>,]+")
+# Une URL citée s'arrête avant les guillemets qui l'encadrent — droits,
+# français, typographiques. Sans eux, une URL entre guillemets sortait de
+# l'expression avec le guillemet fermant collé à sa fin, ne correspondait plus
+# à l'URL importée, et une citation correcte était rejetée jusqu'à épuiser les
+# essais du disjoncteur (constat de revue). Écrits par leur point de code :
+# bruts, les guillemets typographiques se confondent avec les droits.
+_GUILLEMETS = "\"'" + "".join(chr(c) for c in (0x00AB, 0x00BB, 0x201C, 0x201D, 0x2018, 0x2019))
+URL = re.compile(r"https?://[^\s\)\]>," + re.escape(_GUILLEMETS) + "]+")
 
 # --- V2 : ce qui n'est PAS une affirmation chiffrée ------------------------
 # Retirés du texte avant de chercher un chiffre. Un numéro de section ou de
