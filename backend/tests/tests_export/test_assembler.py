@@ -200,27 +200,65 @@ async def test_anchors_survive_a_reordering(project_db: Path) -> None:
 
 async def test_assembler_marks_missing_sections_without_failing(project_db: Path) -> None:
     """Un apercu partiel de la moitie d'un memoire est utile ; un export qui
-    refuse de produire quoi que ce soit ne l'est pas."""
+    refuse de produire quoi que ce soit ne l'est pas.
+
+    Seules les FEUILLES sans texte manquent. Le chapitre 4 n'a pas de texte
+    propre, mais il porte des sections : c'est un titre, pas un trou.
+    """
     await peupler(project_db, {1: "Seul contenu redige."})
 
     async with connect(project_db) as conn:
         document = await assemble(conn, plan(), sections_par_noeud([1]))
 
-    assert document.qmd.count(MISSING_MARKER) == 5
-    assert [n.node_id for n in document.missing()] == [2, 3, 4, 5, 6]
+    assert document.qmd.count(MISSING_MARKER) == 4
+    assert [n.node_id for n in document.missing()] == [2, 3, 5, 6]
     assert [n.node_id for n in document.included()] == [1]
     # Le titre du noeud manquant figure quand meme : la structure se lit.
     assert "## Resultats {#sec-resultats-6}" in document.qmd
 
 
 async def test_empty_content_counts_as_missing(project_db: Path) -> None:
-    """Une section vide n'est pas une section : elle est signalee."""
-    await peupler(project_db, {1: "   \n  "})
+    """Une section vide n'est pas une section : elle est signalee. Un chapitre
+    vide ne l'est pas — ce sont ses sections qui le seront a sa place."""
+    await peupler(project_db, {2: "   \n  "})
 
     async with connect(project_db) as conn:
-        document = await assemble(conn, plan(), sections_par_noeud([1]))
+        document = await assemble(conn, plan(), sections_par_noeud([2]))
 
-    assert [n.node_id for n in document.missing()] == [1, 2, 3, 4, 5, 6]
+    assert [n.node_id for n in document.missing()] == [2, 3, 5, 6]
+
+
+async def test_container_chapter_is_a_heading_not_a_missing_section(project_db: Path) -> None:
+    """Un memoire entierement redige ne porte AUCUN marqueur.
+
+    Defaut constate sur un vrai rendu Quarto : les chapitres, noeuds
+    conteneurs sans texte propre, recevaient le marqueur de section non
+    redigee sous leur titre, et l'export restait PARTIEL a vie — pour une
+    these dont toutes les sections etaient ecrites.
+    """
+    feuilles = {nid: f"Texte de la section {nid}." for nid in (2, 3, 5, 6)}
+    await peupler(project_db, feuilles)
+
+    async with connect(project_db) as conn:
+        document = await assemble(conn, plan(), sections_par_noeud(list(feuilles)))
+
+    assert MISSING_MARKER not in document.qmd
+    assert document.missing() == []
+    # Les chapitres restent des titres numerotes, ancres comprises.
+    assert "# Etat de l art {#sec-etat-de-l-art-1}" in document.qmd
+    assert "# Contribution {#sec-contribution-4}" in document.qmd
+
+
+async def test_chapter_with_its_own_text_keeps_it(project_db: Path) -> None:
+    """Un chapeau de chapitre est un usage academique legitime : il est rendu
+    sous le titre, avant les sections."""
+    await peupler(project_db, {1: "Chapeau du chapitre.", 2: "Premiere section."})
+
+    async with connect(project_db) as conn:
+        document = await assemble(conn, plan(), sections_par_noeud([1, 2]))
+
+    assert document.qmd.index("Chapeau du chapitre.") < document.qmd.index("Premiere section.")
+    assert 1 in [n.node_id for n in document.included()]
 
 
 # --- Cles de citation -----------------------------------------------------

@@ -60,6 +60,11 @@ class AssembledNode(BaseModel):
     section_id: int | None
     anchor: str
     words: int = 0
+    # Nœud qui porte des sections. Sans texte propre, c'est un titre, pas un
+    # trou : le compter manquant faisait sortir une thèse entièrement rédigée
+    # avec un marqueur sous chaque chapitre, et un statut PARTIEL à vie —
+    # défaut constaté sur un vrai rendu Quarto.
+    is_container: bool = False
 
 
 class AssembledDocument(BaseModel):
@@ -67,7 +72,8 @@ class AssembledDocument(BaseModel):
     nodes: list[AssembledNode]
 
     def missing(self) -> list[AssembledNode]:
-        return [n for n in self.nodes if n.section_id is None]
+        """Feuilles sans texte. Un conteneur sans texte propre n'en fait pas partie."""
+        return [n for n in self.nodes if n.section_id is None and not n.is_container]
 
     def included(self) -> list[AssembledNode]:
         return [n for n in self.nodes if n.section_id is not None]
@@ -195,9 +201,14 @@ async def assemble(
         ancre = section_anchor(noeud)
         section_id = sections_par_noeud.get(noeud.id)
         corps = rewrite_citation_keys(contenus.get(section_id, ""), correspondance).strip()
+        conteneur = bool(noeud.children)
 
         morceaux.append(f"{'#' * niveau} {noeud.title} {{#{ancre}}}")
-        morceaux.append(corps if corps else MISSING_MARKER)
+        if corps:
+            # Texte propre — y compris le chapeau d'un chapitre.
+            morceaux.append(corps)
+        elif not conteneur:
+            morceaux.append(MISSING_MARKER)
         assembles.append(
             AssembledNode(
                 node_id=noeud.id,
@@ -206,6 +217,7 @@ async def assemble(
                 section_id=section_id if corps else None,
                 anchor=ancre,
                 words=len(corps.split()),
+                is_container=conteneur,
             )
         )
 
@@ -216,8 +228,7 @@ async def assemble(
     if include_ai_declaration:
         morceaux.append(AI_DECLARATION_ANCHOR)
 
-    manquantes = [n for n in assembles if n.section_id is None]
-    if manquantes:
-        logger.info("Assemblage : %s nœud(s) sans texte rédigé", len(manquantes))
-
-    return AssembledDocument(qmd="\n\n".join(morceaux) + "\n", nodes=assembles)
+    document = AssembledDocument(qmd="\n\n".join(morceaux) + "\n", nodes=assembles)
+    if document.missing():
+        logger.info("Assemblage : %s section(s) sans texte rédigé", len(document.missing()))
+    return document

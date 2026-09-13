@@ -1,5 +1,14 @@
 {# Gabarit de configuration Quarto — US-502, spécifications §9.2.
 
+   TOUTE valeur interpolée passe par `tojson`. Une chaîne JSON est aussi une
+   chaîne YAML entre guillemets valide, échappements compris. Sans cela, le
+   nom d'un projet ou sa langue entraient bruts dans le fichier : un guillemet
+   dans un titre de mémoire cassait l'export, et un saut de ligne injectait
+   une clé de configuration — dont `filters`, que Quarto EXÉCUTE comme un
+   programme. Constat de revue de sécurité, confirmé sur Quarto 1.10.18. Le
+   vecteur réaliste n'est pas l'utilisateur lui-même, mais un fichier projet
+   .sqlite reçu d'un tiers, dont les valeurs n'ont jamais traversé l'API.
+
    `lang` n'est pas décoratif : sans lui, « Figure », « Tableau » et
    « Références » restent en anglais au milieu d'un mémoire français, et
    personne ne s'en aperçoit avant l'impression.
@@ -9,15 +18,14 @@
 #}
 project:
   type: default
-  title: "{{ title }}"
+  title: {{ title|tojson }}
 
-title: "{{ title }}"
-{% if author %}author: "{{ author }}"
-{% endif %}date: "{{ date }}"
-lang: {{ lang }}
+title: {{ title|tojson }}
+date: {{ date|tojson }}
+lang: {{ lang|tojson }}
 
-bibliography: {{ bibliography }}
-csl: {{ csl }}
+bibliography: {{ bibliography|tojson }}
+csl: {{ csl|tojson }}
 
 number-sections: true
 number-depth: {{ number_depth }}

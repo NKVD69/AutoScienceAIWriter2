@@ -15,19 +15,30 @@ d'abord produirait un document citant des clés que le `.bib` ne contient pas.
 **Une citation non vérifiée arrête tout, avant la moindre écriture.** Rien
 n'est produit, pas même un répertoire : un artefact partiel laissé sur le
 disque se prendrait pour un export réussi à la relecture.
+
+**La requête est validée à la frontière, et les écritures quittent la boucle.**
+Formats et gabarit sont bornés à ce que le contrat autorise : un gabarit libre
+faisait lire `TEMPLATES_DIR / "//hote/partage"`, c'est-à-dire un partage SMB
+distant (constat de revue sécurité). Et toute l'écriture du répertoire passe
+par `asyncio.to_thread` : faite dans la boucle, elle suspendait chaque autre
+requête du service pendant sa durée (constat de revue).
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
+import re
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 
 import aiosqlite
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from app.core.config import get_settings
+from app.core.errors import AppError
 from app.core.logging import get_logger
 from app.db.session import transaction
 from app.export import quarto
@@ -46,16 +57,54 @@ CSL_FILENAME = "references.csl"
 QMD_FILENAME = "document.qmd"
 CONFIG_FILENAME = "_quarto.yml"
 REPORT_FILENAME = "rapport.json"
-LOG_FILENAME = "quarto.log"
+LOG_FILENAME = quarto.LOG_FILENAME
 
 TOC_DEPTH = 3
 NUMBER_DEPTH = 4
 
+# Un nom de gabarit est un segment de répertoire, et rien d'autre : ni
+# séparateur, ni remontée, ni lecteur, ni chemin UNC.
+TEMPLATE_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+# Étiquette de langue BCP 47 simplifiée : `fr`, `en-GB`, `zh-Hans`.
+LANGUAGE_TAG = re.compile(r"^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$")
+
+Format = Literal["pdf", "docx", "html"]
+
+
+class InvalidProjectLanguageError(AppError):
+    """La langue du projet n'est pas une étiquette de langue valide."""
+
+    code = "INVALID_PROJECT_LANGUAGE"
+    status_code = 422
+
+    @classmethod
+    def for_value(cls, valeur: str) -> InvalidProjectLanguageError:
+        return cls(
+            f"La langue du projet {valeur[:40]!r} n'est pas une étiquette de langue "
+            "valide (fr, en, en-GB…). Quarto s'en sert pour traduire « Figure », "
+            "« Tableau » et « Références », et pour construire le chemin de son "
+            "fichier de traduction : une valeur arbitraire fait échouer l'export. "
+            "Corriger la langue du projet.",
+            language=valeur[:80],
+        )
+
 
 class ExportRequest(BaseModel):
-    formats: list[str]
+    """Corps de POST /export, borné à ce que le contrat autorise."""
+
+    formats: list[Format] = Field(min_length=1)
     include_ai_declaration: bool = True
     template: str = DEFAULT_TEMPLATE
+
+    @field_validator("template")
+    @classmethod
+    def _gabarit_connu(cls, valeur: str) -> str:
+        """Le motif est vérifié AVANT tout accès disque : un chemin UNC ne doit
+        même pas être sondé, sa simple résolution sortant sur le réseau."""
+        if not TEMPLATE_NAME.match(valeur) or not (TEMPLATES_DIR / valeur).is_dir():
+            disponibles = ", ".join(sorted(p.name for p in TEMPLATES_DIR.iterdir() if p.is_dir()))
+            raise ValueError(f"Gabarit {valeur!r} inconnu. Gabarits disponibles : {disponibles}.")
+        return valeur
 
 
 class ExportReport(BaseModel):
@@ -74,6 +123,7 @@ class ExportReport(BaseModel):
     unresolved_crossrefs: list[str] = []
     unresolved_citations: list[str] = []
     latex_error: str | None = None
+    error: str | None = None
     outputs: list[str] = []
     duration_s: float = 0.0
     quarto_version: str = ""
@@ -89,11 +139,16 @@ def nouveau_repertoire(project_id: int) -> Path:
 
     Deux exports dans la même seconde reçoivent `-2`, `-3` : le suffixe
     coûte un caractère, l'écrasement coûterait un artefact de preuve.
+
+    Le budget de longueur est vérifié AVANT toute création : un répertoire
+    dans lequel Quarto ne pourrait pas ouvrir ses fichiers de session ne doit
+    pas être laissé derrière soi.
     """
     racine = get_settings().exports_dir(project_id)
-    racine.mkdir(parents=True, exist_ok=True)
-
     base = racine / _horodatage()
+    quarto.check_path_budget(base)
+
+    racine.mkdir(parents=True, exist_ok=True)
     candidat = base
     rang = 2
     while candidat.exists():
@@ -103,28 +158,45 @@ def nouveau_repertoire(project_id: int) -> Path:
     return candidat
 
 
+def valider_langue(langue: str) -> str:
+    """Refuse une langue qui n'est pas une étiquette BCP 47.
+
+    L'échappement du gabarit rend la langue inerte dans le YAML, mais Quarto
+    construit avec elle le chemin de son fichier de traduction : une valeur
+    arbitraire faisait échouer l'export sur une erreur système opaque —
+    mesuré sur Quarto 1.10.18.
+    """
+    if not LANGUAGE_TAG.match(langue):
+        raise InvalidProjectLanguageError.for_value(langue)
+    return langue
+
+
 def render_config(
-    plan: PlanOut,
+    plan: PlanOut | None,
     projet: dict,
     formats: list[str],
     template: str = DEFAULT_TEMPLATE,
 ) -> str:
-    """Rend `_quarto.yml` depuis le gabarit Jinja du modèle."""
+    """Rend `_quarto.yml` depuis le gabarit Jinja du modèle.
+
+    Toute valeur passe par le filtre `tojson` du gabarit ; la langue est en
+    outre validée ici.
+    """
     from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
+    langue = valider_langue(projet.get("language") or "fr")
     environnement = Environment(
         loader=FileSystemLoader(str(TEMPLATES_DIR / template)),
         undefined=StrictUndefined,
         keep_trailing_newline=True,
-        autoescape=False,  # YAML, pas HTML : échapper corromprait le fichier.
+        autoescape=False,  # YAML, pas HTML : `tojson` fait l'échappement utile.
     )
     gabarit = environnement.get_template("_quarto.yml.j2")
     return gabarit.render(
         title=projet["name"],
-        author=projet.get("author") or "",
         date=datetime.now(UTC).date().isoformat(),
         # Sans `lang`, « Figure » et « Références » restent en anglais.
-        lang=projet.get("language") or "fr",
+        lang=langue,
         bibliography=BIB_FILENAME,
         csl=CSL_FILENAME,
         formats=formats,
@@ -149,22 +221,39 @@ async def _projet(conn: aiosqlite.Connection, project_id: int) -> dict:
     }
 
 
-def _copier_figures(conn_dir: Path, destination: Path) -> list[str]:
+def _copier_figures(source_dir: Path, destination: Path) -> list[str]:
     """Copie les artefacts de code dans le répertoire de compilation.
 
     Chemins relatifs : un `.qmd` qui référencerait un chemin absolu ne
     compilerait plus une fois le répertoire d'export déplacé ou archivé.
     """
-    if not conn_dir.exists():
+    if not source_dir.exists():
         return []
     cible = destination / "figures"
     cible.mkdir(exist_ok=True)
     copiees = []
-    for fichier in sorted(conn_dir.glob("*")):
+    for fichier in sorted(source_dir.glob("*")):
         if fichier.is_file():
             shutil.copy2(fichier, cible / fichier.name)
             copiees.append(f"figures/{fichier.name}")
     return copiees
+
+
+def _ecrire_artefacts(
+    repertoire: Path,
+    bib: str,
+    qmd: str,
+    config: str,
+    template: str,
+    figures_dir: Path | None,
+) -> None:
+    """Écritures du répertoire d'export. Synchrone : appelé hors de la boucle."""
+    (repertoire / BIB_FILENAME).write_text(bib, encoding="utf-8")
+    (repertoire / QMD_FILENAME).write_text(qmd, encoding="utf-8")
+    (repertoire / CONFIG_FILENAME).write_text(config, encoding="utf-8")
+    shutil.copy2(TEMPLATES_DIR / template / CSL_FILENAME, repertoire / CSL_FILENAME)
+    if figures_dir:
+        _copier_figures(figures_dir, repertoire)
 
 
 async def prepare(
@@ -181,6 +270,8 @@ async def prepare(
     """
     plan = await plan_service._require_plan(conn, project_id)
     projet = await _projet(conn, project_id)
+    # Avant toute écriture : une langue invalide lève ici.
+    config = await asyncio.to_thread(render_config, plan, projet, requete.formats, requete.template)
 
     sections_par_noeud = await includable_sections(conn)
     section_ids = sorted(sections_par_noeud.values())
@@ -189,21 +280,16 @@ async def prepare(
     bib, entrees = await build_bibliography(conn, section_ids)
     document = await assemble(conn, plan, sections_par_noeud, requete.include_ai_declaration)
 
-    repertoire = nouveau_repertoire(project_id)
-    (repertoire / BIB_FILENAME).write_text(bib, encoding="utf-8")
-    (repertoire / QMD_FILENAME).write_text(document.qmd, encoding="utf-8")
-    (repertoire / CONFIG_FILENAME).write_text(
-        render_config(plan, projet, requete.formats, requete.template), encoding="utf-8"
+    repertoire = await asyncio.to_thread(nouveau_repertoire, project_id)
+    await asyncio.to_thread(
+        _ecrire_artefacts, repertoire, bib, document.qmd, config, requete.template, figures_dir
     )
-    shutil.copy2(TEMPLATES_DIR / requete.template / CSL_FILENAME, repertoire / CSL_FILENAME)
-    if figures_dir:
-        _copier_figures(figures_dir, repertoire)
 
     rapport = ExportReport(
         project_id=project_id,
         directory=str(repertoire),
         started_at=datetime.now(UTC).isoformat(),
-        formats=requete.formats,
+        formats=list(requete.formats),
         template=requete.template,
         include_ai_declaration=requete.include_ai_declaration,
         sections_included=[
@@ -236,27 +322,35 @@ async def run_export(
             conn,
             project_id,
             AuditEventType.EXPORT_STARTED,
-            {"formats": requete.formats, "template": requete.template},
+            {"formats": list(requete.formats), "template": requete.template},
             tx=True,
         )
 
     repertoire, rapport, _, _ = await prepare(conn, project_id, requete, figures_dir)
 
-    resultat, journal = await quarto.render(repertoire, requete.formats)
-    (repertoire / LOG_FILENAME).write_text(journal, encoding="utf-8")
+    try:
+        # `render` écrit lui-même le journal de compilation dans le répertoire.
+        resultat, _ = await quarto.render(repertoire, list(requete.formats))
+    except AppError as exc:
+        # Le répertoire existe déjà : sans rapport, un export avorté se lirait
+        # comme un export dont on a perdu la trace.
+        echec = rapport.model_copy(update={"status": "ECHEC", "error": exc.message})
+        await asyncio.to_thread(ecrire_rapport, repertoire, echec)
+        raise
 
     rapport = rapport.model_copy(
         update={
             "unresolved_crossrefs": resultat.unresolved_crossrefs,
             "unresolved_citations": resultat.unresolved_citations,
             "latex_error": resultat.latex_error,
+            "error": resultat.error,
             "outputs": resultat.outputs,
             "duration_s": resultat.duration_s,
             "quarto_version": resultat.version,
             "status": _statut(resultat, rapport),
         }
     )
-    ecrire_rapport(repertoire, rapport)
+    await asyncio.to_thread(ecrire_rapport, repertoire, rapport)
 
     async with transaction(conn):
         await audit_service.append(

@@ -103,7 +103,12 @@ async def peupler(db: Path, avec_section: bool = True) -> None:
                 await conn.execute(
                     "INSERT INTO draft_section (id, plan_node_id, content_qmd, status,"
                     " version, generated_at) VALUES (1,1,"
-                    "'La filtration decroit [@src1_2019_filtration].',?,1,?)",
+                    # Les DEUX cles figurent dans le texte. citeproc ne rend que
+                    # ce qui est cite dans le document : une citation verifiee
+                    # en base mais absente du texte n'apparait dans aucune
+                    # bibliographie rendue, note de prepublication comprise.
+                    "'La filtration decroit [@src1_2019_filtration], ce que confirment "
+                    "des resultats recents [@src2_2024_resultats].',?,1,?)",
                     (str(SectionStatus.REVIEWING), NOW),
                 )
                 for cid, source_id, cle in (
@@ -198,6 +203,32 @@ def test_log_parser_detects_unresolved_citation() -> None:
     assert citations == ["dupont_2019_absent"]
 
 
+# Journal RELEVE sur Quarto 1.10.18, codes de couleur ANSI compris, en rendant
+# un document volontairement casse. Quarto a rendu ce document en code 0 : sans
+# analyse du journal, l'export aurait ete declare reussi.
+JOURNAL_QUARTO_1_10 = (
+    "\x1b[33mWARNING (C:/Program Files/Quarto/share/filters/main.lua:14840) "
+    "Unable to resolve crossref @fig-inexistante\n"
+    "\x1b[39m\x1b[33mWARNING (C:/Program Files/Quarto/share/filters/main.lua:14840) "
+    "Unable to resolve crossref @tbl-absent\n"
+    "\x1b[39m\x1b[33mWARNING (C:/Program Files/Quarto/share/filters/main.lua:14840) "
+    "Unable to resolve crossref @sec-fantome\n"
+    "\x1b[39m[WARNING] Citeproc: citation cle_inexistante_2020 not found\n"
+    "Output created: document.html\n"
+)
+
+
+def test_log_parser_matches_real_quarto_1_10_warnings() -> None:
+    """Les motifs avaient ete ecrits d'apres la documentation. Ce test les
+    confronte a la formulation reellement emise, pour qu'une evolution de
+    Quarto qui la changerait soit visible ici plutot que dans un PDF casse."""
+    renvois, citations, erreur = analyse_log(JOURNAL_QUARTO_1_10)
+
+    assert renvois == ["fig-inexistante", "tbl-absent", "sec-fantome"]
+    assert citations == ["cle_inexistante_2020"]
+    assert erreur is None
+
+
 def test_log_parser_is_silent_on_a_clean_log() -> None:
     propre = "pandoc\n  to: latex\nOutput created: document.pdf\n"
     assert analyse_log(propre) == ([], [], None)
@@ -290,6 +321,208 @@ def test_quarto_yml_enables_numbering_and_crossref() -> None:
     assert config["number-sections"] is True
     assert config["crossref"]["fig-title"] == "Figure"
     assert config["crossref"]["tbl-title"] == "Tableau"
+
+
+# --- Durcissement : constats de la revue securite -------------------------
+
+
+@pytest.mark.parametrize(
+    "nom",
+    [
+        'Le "vivant" et ses marges',
+        "Titre\nfilters:\n  - evil.cmd",
+        "Titre : avec deux-points # et diese",
+        "Accolades {#sec-x} et crochets [@cle]",
+    ],
+)
+def test_quarto_yml_survives_any_project_name(nom: str) -> None:
+    """Le nom d'un projet est du texte libre. Interpole brut dans le YAML, un
+    simple guillemet cassait l'export, et un saut de ligne injectait une cle
+    de configuration — dont `filters`, qui fait EXECUTER un programme par
+    Quarto. Constat de revue, confirme sur le binaire reel."""
+    config = yaml.safe_load(
+        render_config(plan=None, projet={"name": nom, "language": "fr"}, formats=["pdf"])
+    )
+
+    assert config["title"] == nom
+    assert config["project"]["title"] == nom
+    assert "filters" not in config
+    assert "pre-render" not in config["project"]
+
+
+def test_quarto_yml_refuses_an_invalid_project_language() -> None:
+    """`lang` etait interpole SANS guillemets : la langue d'un projet recu d'un
+    tiers, dans un fichier .sqlite, suffisait a ajouter une cle `filters`.
+
+    Echappee, elle restait nuisible autrement : Quarto construit avec elle le
+    chemin de son fichier de traduction, et une valeur piegee faisait echouer
+    l'export sur une erreur systeme opaque — mesure sur Quarto 1.10.18. Elle
+    est donc refusee au rendu, avec un message qui dit quoi corriger.
+    """
+    from app.services.export_service import InvalidProjectLanguageError
+
+    hostile = 'fr\nfilters:\n  - "evil_filter.cmd"\nx: y'
+    with pytest.raises(InvalidProjectLanguageError) as exc:
+        render_config(plan=None, projet={"name": "These", "language": hostile}, formats=["html"])
+    assert "langue" in exc.value.message.lower()
+
+
+@pytest.mark.parametrize("langue", ["fr", "en", "en-GB", "pt-BR", "zh-Hans", "de-CH"])
+def test_quarto_yml_accepts_standard_language_tags(langue: str) -> None:
+    config = yaml.safe_load(
+        render_config(plan=None, projet={"name": "These", "language": langue}, formats=["html"])
+    )
+    assert config["lang"] == langue
+
+
+@pytest.mark.parametrize("formats", [[], ["epub"], ["pdf", "exe"]])
+def test_export_request_rejects_formats_outside_the_contract(formats: list[str]) -> None:
+    """Le contrat enumere pdf, docx et html. Une liste vide ou un format
+    inconnu produisait un `_quarto.yml` sans aucun format, au lieu d'un 422."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        ExportRequest(formats=formats)
+
+
+@pytest.mark.parametrize(
+    "gabarit",
+    ["../..", "..\\..", "C:/Windows/System32", "//hote/partage", "\\\\hote\\partage", "inexistant"],
+)
+def test_export_request_rejects_template_outside_the_templates_dir(gabarit: str) -> None:
+    """`TEMPLATES_DIR / gabarit` remplace tout le chemin quand `gabarit` est
+    absolu : un chemin UNC faisait lire le gabarit sur un partage SMB distant
+    — sortie reseau non consentie (ADR-010) et fuite de condensat NTLM."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        ExportRequest(formats=["pdf"], template=gabarit)
+
+
+def test_export_request_accepts_the_contract_values() -> None:
+    requete = ExportRequest(formats=["pdf", "docx", "html"])
+    assert requete.template == "default"
+
+
+def _processus_vivant(pid: int) -> bool:
+    """Le processus existe-t-il encore ? Sans psutil, et sans jamais le tuer.
+
+    Sous Windows, `os.kill(pid, 0)` n'est PAS une sonde : il appelle
+    TerminateProcess. On interroge donc le code de sortie par l'API Win32.
+    """
+    import os
+    import sys
+
+    if sys.platform != "win32":
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        return True
+
+    import ctypes
+
+    process_query_limited_information = 0x1000
+    still_active = 259
+    noyau = ctypes.windll.kernel32
+    poignee = noyau.OpenProcess(process_query_limited_information, False, pid)
+    if not poignee:
+        return False
+    try:
+        code = ctypes.c_ulong()
+        noyau.GetExitCodeProcess(poignee, ctypes.byref(code))
+        return code.value == still_active
+    finally:
+        noyau.CloseHandle(poignee)
+
+
+async def test_timeout_kills_the_whole_process_tree(tmp_path: Path) -> None:
+    """Sous Windows, `kill()` ne tue que le processus direct : Pandoc, LuaLaTeX
+    et Deno, descendants de Quarto, survivaient au depassement de delai. Et
+    `communicate()` pouvait attendre sans fin la fermeture de tubes qu'ils
+    tenaient encore — le delai ne bornait alors plus rien.
+
+    Simule sans Quarto : un enfant lance un petit-enfant qui dort deux minutes
+    en heritant de la sortie standard, exactement la forme du cas reel.
+    """
+    import asyncio
+    import sys
+    import time
+
+    from app.export.quarto import CompilationTimeoutError, run_bounded
+
+    marque = tmp_path / "petit_enfant.pid"
+    enfant = (
+        "import pathlib, subprocess, sys, time\n"
+        "p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)'])\n"
+        f"pathlib.Path(r'{marque}').write_text(str(p.pid))\n"
+        "time.sleep(120)\n"
+    )
+
+    debut = time.monotonic()
+    with pytest.raises(CompilationTimeoutError):
+        await run_bounded(
+            [sys.executable, "-c", enfant], tmp_path, tmp_path / "journal.log", timeout_s=3
+        )
+    assert time.monotonic() - debut < 30, "le delai doit borner l'attente"
+
+    petit_enfant = int(marque.read_text(encoding="utf-8"))
+    for _ in range(50):
+        if not _processus_vivant(petit_enfant):
+            break
+        await asyncio.sleep(0.1)
+    assert not _processus_vivant(petit_enfant), "le petit-enfant a survecu au depassement"
+
+
+def test_path_budget_refuses_directories_quarto_cannot_open() -> None:
+    """Quarto ouvre une base SQLite (Deno KV) sous le repertoire d'export, dans
+    `.quarto/quarto-session-temp<16 hex>/sass/sass.kv`. Au-dela de 260
+    caracteres elle ne s'ouvre pas — et `LongPathsEnabled` n'y change rien,
+    mesure sur ce poste. L'export echouait alors en ECHEC muet. Le budget est
+    donc verifie AVANT de compiler, avec la variable a raccourcir."""
+    from app.export.quarto import ExportPathTooLongError, check_path_budget
+
+    check_path_budget(Path("C:/Users/u/.science-ai-writer/exports/1/20260912T220957Z"), True)
+
+    long = Path("C:/" + "d" * 200 + "/exports/1/20260912T220957Z")
+    with pytest.raises(ExportPathTooLongError) as exc:
+        check_path_budget(long, True)
+    assert "SAW_DATA_DIR" in exc.value.message
+    # Hors Windows, la limite ne s'applique pas.
+    check_path_budget(long, False)
+
+
+def test_log_parser_recognizes_quarto_path_too_long() -> None:
+    """Erreur reellement emise par Quarto 1.10.18, relevee sur ce poste."""
+    from app.export.quarto import find_path_too_long
+
+    journal = (
+        "ERROR: unable to open database file: C:\\tres\\long\\chemin\\.quarto\\"
+        "quarto-session-tempb23e1b808a0fe21d\\sass\\sass.kv\n\nStack trace:\n"
+        "    at async Object.openKv (ext:deno_kv/01_db.ts:9:15)\n"
+    )
+    assert find_path_too_long(journal) == (
+        "C:\\tres\\long\\chemin\\.quarto\\quarto-session-tempb23e1b808a0fe21d\\sass\\sass.kv"
+    )
+    assert find_path_too_long("Output created: document.pdf") is None
+
+
+async def test_prepare_refuses_a_data_dir_too_long_for_quarto(
+    project_db: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Le refus a lieu avant d'ecrire quoi que ce soit sur le disque."""
+    from app.export import quarto as module_quarto
+    from app.export.quarto import ExportPathTooLongError
+
+    await peupler(project_db)
+    monkeypatch.setattr(module_quarto, "IS_WINDOWS", True)
+    monkeypatch.setattr(get_settings(), "data_dir", tmp_path / ("x" * 200))
+
+    async with connect(project_db) as conn:
+        with pytest.raises(ExportPathTooLongError):
+            await prepare(conn, 1, ExportRequest(formats=["pdf"]))
+
+    assert not (tmp_path / ("x" * 200)).exists()
 
 
 def test_default_csl_is_valid_xml() -> None:
@@ -422,9 +655,45 @@ async def test_export_pdf_docx_html(project_db: Path, data_dir: Path) -> None:
 
     assert rapport.status in ("OK", "PARTIEL")
     assert rapport.unresolved_citations == []
+    assert rapport.unresolved_crossrefs == []
     produits = {Path(nom).suffix for nom in rapport.outputs}
     assert produits >= {".pdf", ".docx", ".html"}
     assert (Path(rapport.directory) / REPORT_FILENAME).exists()
+
+    # Scenario Gherkin « Export triple » : la bibliographie est rendue par
+    # citeproc DANS CHAQUE format — la presence des fichiers ne le prouve pas.
+    from app.export.bibliography import PREPRINT_NOTE
+
+    for extension in (".pdf", ".docx", ".html"):
+        texte = texte_rendu(Path(rapport.directory) / f"document{extension}")
+        assert "Dupont" in texte, f"entree bibliographique absente du {extension}"
+        assert PREPRINT_NOTE in texte, f"note de prepublication absente du {extension}"
+
+
+def texte_rendu(chemin: Path) -> str:
+    """Texte lisible d'une sortie, espaces aplatis.
+
+    Aplatir n'est pas une commodite : dans le PDF, la note de prepublication
+    est coupee par un saut de ligne, et une recherche brute la declarait
+    absente alors qu'elle y figure. Les cesures de fin de ligne sont
+    recollees pour la meme raison.
+    """
+    import re
+    import zipfile
+
+    if chemin.suffix == ".pdf":
+        import pymupdf
+
+        with pymupdf.open(chemin) as document:
+            brut = "\n".join(page.get_text() for page in document)
+    elif chemin.suffix == ".docx":
+        with zipfile.ZipFile(chemin) as archive:
+            brut = re.sub(r"<[^>]+>", "", archive.read("word/document.xml").decode("utf-8"))
+    else:
+        brut = re.sub(r"<[^>]+>", " ", chemin.read_text(encoding="utf-8"))
+
+    recolle = re.sub(r"-\s*\n\s*", "", brut)
+    return " ".join(recolle.split())
 
 
 @pytest.mark.integration
@@ -440,7 +709,11 @@ async def test_export_timeout_is_reported(project_db: Path, data_dir: Path) -> N
         repertoire, _, _, _ = await prepare(conn, 1, ExportRequest(formats=["pdf"]))
         from app.export import quarto as module_quarto
 
+        # Delai nul, et non d'une seconde : le test ne doit pas dependre de la
+        # vitesse de Quarto. Avec une seconde, un Quarto qui echoue plus vite
+        # que cela — un chemin trop long suffit — fait croire que le delai
+        # n'est jamais applique.
         with pytest.raises(AppError) as exc:
-            await module_quarto.render(repertoire, ["pdf"], timeout_s=1)
+            await module_quarto.render(repertoire, ["pdf"], timeout_s=0)
 
     assert "SAW_EXPORT_TIMEOUT_SECONDS" in exc.value.message
