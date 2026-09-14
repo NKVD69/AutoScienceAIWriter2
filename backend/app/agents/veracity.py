@@ -14,6 +14,10 @@ attraper.
   doit figurer dans la liste close du contexte.
 - **V2** — un chiffre présenté comme sourcé doit être rattaché à un extrait.
 - **V3** — tout DOI ou URL du texte doit exister dans les sources du projet.
+- **V4** — toute clé déclarée par une affirmation sourcée doit figurer dans
+  le texte. Règle ajoutée au-delà des trois contrôles de §5.5, sur décision
+  du projet : sans elle, une affirmation rattachée à sa source en base peut
+  n'afficher aucune citation dans le document rendu.
 """
 
 from __future__ import annotations
@@ -235,17 +239,54 @@ async def check_identifiers(
     return violations
 
 
+# --- V4 -------------------------------------------------------------------
+
+
+def check_declared_keys_cited(draft: SectionDraft) -> list[VeracityViolation]:
+    """Toute clé déclarée par une affirmation sourcée figure dans le texte.
+
+    citeproc ne rend que ce que le texte cite. Une clé déclarée dans `claims`
+    mais absente de `content_qmd` rattache l'affirmation à sa source en base,
+    et n'en affiche pourtant aucune dans le document : pour le lecteur du
+    mémoire, c'est une affirmation sans source.
+    """
+    presentes = extract_inline_keys(draft.content_qmd)
+    violations: list[VeracityViolation] = []
+    signalees: set[str] = set()
+    for claim in draft.claims:
+        if claim.kind != ClaimKind.SOURCED:
+            continue
+        for cle in claim.citation_keys:
+            if cle in presentes or cle in signalees:
+                continue
+            signalees.add(cle)
+            violations.append(
+                VeracityViolation(
+                    rule="V4",
+                    token=cle,
+                    message=(
+                        f"La clé « {cle} » est déclarée pour l'affirmation "
+                        f"« {claim.text[:120]} », mais n'apparaît pas dans content_qmd. "
+                        f"Cite-la dans le texte sous la forme [@{cle}], à l'endroit de "
+                        "l'affirmation, ou retire-la de claims."
+                    ),
+                )
+            )
+    return violations
+
+
 # --- Orchestration --------------------------------------------------------
 
 
 async def check_veracity(
     conn: aiosqlite.Connection, draft: SectionDraft, context: SectionContext
 ) -> VeracityResult:
-    """Applique V1, V2 et V3. Aucun jugement délégué à un modèle."""
+    """Applique V1 à V4. Aucun jugement délégué à un modèle."""
     violations = (
         check_citation_keys(draft, context)
         + check_numeric_claims(draft)
         + await check_identifiers(conn, draft)
+        + check_declared_keys_cited(draft)
     )
     if violations:
         logger.warning(

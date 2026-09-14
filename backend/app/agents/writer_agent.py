@@ -103,9 +103,11 @@ Rédige la section et renvoie un objet JSON strict de la forme :
 
 Chaque affirmation du texte figure dans claims avec sa nature. Une
 affirmation sourced porte au moins une clé de la liste ci-dessus et au moins
-un chunk_id pris parmi ceux fournis. Une affirmation synthesis, hypothesis ou
-limitation ne porte aucune clé. word_count est le nombre de mots réel de
-content_qmd."""
+un chunk_id pris parmi ceux fournis. Chacune de ses clés apparaît dans content_qmd
+sous la forme [@clé], à l'endroit de l'affirmation : une clé déclarée mais
+absente du texte fait rejeter la section. Une affirmation synthesis,
+hypothesis ou limitation ne porte aucune clé. word_count est le nombre de mots
+réel de content_qmd."""
 
     if correction:
         # Ajouté au message utilisateur, jamais au prompt système : celui-ci

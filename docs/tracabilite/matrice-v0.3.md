@@ -116,6 +116,9 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | Chemin d'export trop long refusé avant compilation | ADR-012 | §9.2 | **US-502** | `test_path_budget_refuses_directories_quarto_cannot_open`, `test_prepare_refuses_a_data_dir_too_long_for_quarto` |
 | Transactions sérialisées sur connexion partagée | ADR-001 | §4.5 | US-001, US-101 | `test_concurrent_transactions_on_shared_connection_are_serialized`, `test_project_writes_go_through_transaction` |
 | Longueur de section mesurée, non déclarée | ADR-008 | §5.5 | **US-301** | `test_word_count_is_measured_not_declared` |
+| V4 — clé déclarée absente du texte | ADR-008 | §5.5 | **US-301** | `test_v4_declared_key_absent_from_text_rejected`, `test_veracity_runs_v4` |
+| Moteur LM Studio ou Ollama, indifféremment | ADR-014 | §6.1 | US-003 | `test_switching_backend_alone_switches_model_and_url`, `test_each_backend_defaults_to_its_own_engine_model` |
+| Langue du projet contrainte par le contrat | ADR-010 | §4.2 | US-101 | `test_create_rejects_invalid_language`, `test_language_pattern_matches_the_contract` |
 | Erreurs 422 au format du contrat | — | — | Transverse | `test_validation_error_matches_contract_shape` |
 | Audit à détection d'altération | ADR-009 | §11.1 | US-701 | `test_chain_valid_over_500_entries`, `test_tamper_detection_returns_index_and_id` |
 | Vocabulaire non trompeur | ADR-009 | §11.1 | US-701 | `test_wording_no_immutable_claim` |

@@ -413,6 +413,64 @@ async def test_v3_url_quoted_in_french_style_is_accepted(conn) -> None:
         assert await check_identifiers(conn, section) == [], citation
 
 
+# --- V4 : cle declaree absente du texte -----------------------------------
+
+
+def _affirmation_sourcee() -> Claim:
+    return Claim(
+        text="La filtration decroit apres exposition prolongee.",
+        kind="sourced",
+        citation_keys=["src1_2021_filtration"],
+        chunk_ids=[11],
+    )
+
+
+def test_v4_declared_key_absent_from_text_rejected() -> None:
+    """Une affirmation sourcee dont la cle ne figure pas dans le texte est bien
+    rattachee a sa source en base, mais n'affiche AUCUNE citation dans le
+    document rendu : citeproc ne montre que ce que le texte cite. Pour le
+    lecteur du memoire, c'est une affirmation sans source."""
+    from app.agents.veracity import check_declared_keys_cited
+
+    section = draft("La filtration decroit apres exposition prolongee.", [_affirmation_sourcee()])
+    violations = check_declared_keys_cited(section)
+
+    assert [v.rule for v in violations] == ["V4"]
+    assert violations[0].token == "src1_2021_filtration"
+    # Le message dit comment corriger, pas seulement ce qui manque.
+    assert "[@src1_2021_filtration]" in violations[0].message
+
+
+def test_v4_accepts_keys_cited_in_any_quarto_form() -> None:
+    from app.agents.veracity import check_declared_keys_cited
+
+    for contenu in (
+        "La filtration decroit [@src1_2021_filtration].",
+        "Comme le montre @src1_2021_filtration, la filtration decroit.",
+        "La filtration decroit [@src2_2019_exposition; @src1_2021_filtration].",
+        "La filtration decroit [-@src1_2021_filtration, p. 4].",
+    ):
+        assert check_declared_keys_cited(draft(contenu, [_affirmation_sourcee()])) == [], contenu
+
+
+def test_v4_ignores_non_sourced_claims() -> None:
+    """Une synthese ne porte aucune cle (etage 1) : V4 n'a rien a exiger."""
+    from app.agents.veracity import check_declared_keys_cited
+
+    limite = Claim(text="Le mecanisme reste discute.", kind="limitation")
+    assert check_declared_keys_cited(draft("Le mecanisme reste discute.", [limite])) == []
+
+
+async def test_veracity_runs_v4(conn) -> None:
+    """V4 est applique par `check_veracity`, donc par le noeud de garde-fou."""
+    section = draft("La filtration decroit apres exposition prolongee.", [_affirmation_sourcee()])
+    resultat = await check_veracity(conn, section, contexte())
+
+    assert not resultat.ok
+    assert [v.rule for v in resultat.violations] == ["V4"]
+    assert "src1_2021_filtration" in resultat.to_correction()
+
+
 async def test_v3_unknown_url_rejected(conn) -> None:
     section = draft(
         "Les donnees sont sur https://exemple-invente.test/jeu-de-donnees.",

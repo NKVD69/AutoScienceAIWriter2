@@ -43,6 +43,45 @@ async def create_project(client: httpx.AsyncClient, **overrides) -> dict:
 # --- Création -------------------------------------------------------------
 
 
+@pytest.mark.parametrize(
+    "langue",
+    ['fr\nfilters:\n  - "evil.cmd"', "francais", "f", "12", "fr_FR", ""],
+)
+async def test_create_rejects_invalid_language(client: httpx.AsyncClient, langue: str) -> None:
+    """Contrat : la langue est une etiquette BCP 47. Une valeur libre finissait
+    dans `_quarto.yml` — ou elle a permis d'injecter une cle `filters`, que
+    Quarto execute — et dans un chemin de fichier qui faisait echouer l'export."""
+    r = await client.post("/api/v1/projects", json={**CREATION, "language": langue})
+
+    assert r.status_code == 422
+    assert r.json()["code"] == "VALIDATION_FAILED"
+    assert "language" in r.json()["message"]
+
+
+@pytest.mark.parametrize("langue", ["fr", "en", "en-GB", "pt-BR", "zh-Hans"])
+async def test_create_accepts_standard_language_tags(
+    client: httpx.AsyncClient, langue: str
+) -> None:
+    projet = await create_project(client, language=langue)
+    assert projet["language"] == langue
+
+
+def test_language_pattern_matches_the_contract() -> None:
+    """Une seule definition de l'etiquette de langue, partagee par le contrat,
+    le modele d'entree et la verification faite a l'export."""
+    import yaml
+
+    from app.models.project import LANGUAGE_TAG_PATTERN
+    from app.services.export_service import LANGUAGE_TAG
+
+    contrat = Path(__file__).resolve().parents[3] / "contracts" / "openapi.yaml"
+    schema = yaml.safe_load(contrat.read_text(encoding="utf-8"))
+    langue = schema["components"]["schemas"]["ProjectCreate"]["properties"]["language"]
+
+    assert langue["pattern"] == LANGUAGE_TAG_PATTERN
+    assert LANGUAGE_TAG.pattern == LANGUAGE_TAG_PATTERN
+
+
 async def test_create_project_creates_dedicated_sqlite_file(
     client: httpx.AsyncClient, tmp_path: Path
 ) -> None:

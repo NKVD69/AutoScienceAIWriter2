@@ -67,13 +67,24 @@ sur des semaines. Les budgets de latence de §12.2 sont levés en conséquence.
 Le rechargement des poids se détecte par l'**état de résidence** du modèle, non
 par une durée : `llm_max_ttft_ms` n'est qu'un plafond de sécurité.
 
-Ollama reste disponible derrière la même interface : `SAW_LLM_BACKEND=ollama`
-avec un `SAW_LLM_MODEL` correspondant.
+**LM Studio ou Ollama, indifféremment.** Les deux moteurs vivent derrière la
+même interface, et basculer ne demande qu'un réglage :
+
+```bash
+SAW_LLM_BACKEND=ollama
+```
+
+Chaque moteur garde son propre identifiant de modèle — `google/gemma-4-31b`
+n'existe pas chez Ollama, qui le connaît sous `gemma4:31b` — dans
+`SAW_LMSTUDIO_MODEL` et `SAW_OLLAMA_MODEL`. `SAW_LLM_MODEL` n'existe plus : un
+réglage unique obligeait à changer aussi le modèle en changeant de moteur.
+Aucun modèle n'est téléchargé d'office (ADR-010) : `ollama pull gemma4:31b` ou
+`lms get google/gemma-4-31b` restent un geste de l'utilisateur.
 
 ## Garde-fous de véracité
 
 Une citation inventée dans un mémoire de doctorat détruit la crédibilité du
-travail et celle de l'outil. Trois contrôles s'appliquent à chaque section
+travail et celle de l'outil. Quatre contrôles s'appliquent à chaque section
 produite, **avant** toute écriture en base ([§5.5](docs/specs/specifications-techniques-v0.3.md),
 [ADR-008](docs/adr/ADR-008-guardrails-circuit-breaker.md)) :
 
@@ -82,6 +93,7 @@ produite, **avant** toute écriture en base ([§5.5](docs/specs/specifications-t
 | **V1** | Toute clé de citation, déclarée ou écrite `@clef` dans le texte, figure dans la liste close dérivée des extraits fournis | clé inconnue |
 | **V2** | Toute affirmation présentée comme sourcée et portant un chiffre significatif désigne l'extrait qui l'établit | chiffre non rattaché |
 | **V3** | Tout DOI et toute URL du texte existent dans les sources du projet | identifiant hors base |
+| **V4** | Toute clé déclarée par une affirmation sourcée figure aussi dans le texte | citation invisible dans le document rendu |
 
 **Ils sont syntaxiques, et c'est ce qui les rend fiables.** Aucun ne demande à
 un modèle de juger sa propre production : un modèle qui invente une référence

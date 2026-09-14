@@ -375,6 +375,17 @@ def test_quarto_yml_accepts_standard_language_tags(langue: str) -> None:
     assert config["lang"] == langue
 
 
+def test_trailing_newline_does_not_slip_through_the_language_check() -> None:
+    """En Python, `$` accepte une fin de ligne finale : `re.match` reussit sur
+    « fr » suivi d'un saut de ligne. Le contrat, applique par pydantic-core,
+    refuse cette valeur ; la verification refaite a l'export, en Python, la
+    laissait passer — et Quarto construisait avec elle un chemin invalide."""
+    from app.services.export_service import InvalidProjectLanguageError
+
+    with pytest.raises(InvalidProjectLanguageError):
+        render_config(plan=None, projet={"name": "These", "language": "fr\n"}, formats=["html"])
+
+
 @pytest.mark.parametrize("formats", [[], ["epub"], ["pdf", "exe"]])
 def test_export_request_rejects_formats_outside_the_contract(formats: list[str]) -> None:
     """Le contrat enumere pdf, docx et html. Une liste vide ou un format
@@ -472,6 +483,44 @@ async def test_timeout_kills_the_whole_process_tree(tmp_path: Path) -> None:
             break
         await asyncio.sleep(0.1)
     assert not _processus_vivant(petit_enfant), "le petit-enfant a survecu au depassement"
+
+
+async def test_cancellation_also_kills_the_whole_process_tree(tmp_path: Path) -> None:
+    """Une annulation — l'arret du service pendant une compilation — leve
+    `CancelledError`, pas `TimeoutError` : l'arbre de processus n'etait pas
+    tue, et Quarto continuait seul, orphelin."""
+    import asyncio
+    import sys
+
+    from app.export.quarto import run_bounded
+
+    marque = tmp_path / "petit_enfant.pid"
+    enfant = (
+        "import pathlib, subprocess, sys, time\n"
+        "p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)'])\n"
+        f"pathlib.Path(r'{marque}').write_text(str(p.pid))\n"
+        "time.sleep(120)\n"
+    )
+    tache = asyncio.create_task(
+        run_bounded(
+            [sys.executable, "-c", enfant], tmp_path, tmp_path / "journal.log", timeout_s=600
+        )
+    )
+    for _ in range(100):
+        if marque.exists() and marque.read_text(encoding="utf-8"):
+            break
+        await asyncio.sleep(0.1)
+
+    tache.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await tache
+
+    petit_enfant = int(marque.read_text(encoding="utf-8"))
+    for _ in range(50):
+        if not _processus_vivant(petit_enfant):
+            break
+        await asyncio.sleep(0.1)
+    assert not _processus_vivant(petit_enfant), "le petit-enfant a survecu a l'annulation"
 
 
 def test_path_budget_refuses_directories_quarto_cannot_open() -> None:

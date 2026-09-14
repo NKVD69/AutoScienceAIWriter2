@@ -345,6 +345,15 @@ async def _tuer_arbre(pid: int) -> None:
         pass
 
 
+async def _arreter(processus: asyncio.subprocess.Process) -> None:
+    """Tue l'arbre de processus, puis attend sa disparition un temps borné."""
+    await _tuer_arbre(processus.pid)
+    try:
+        await asyncio.wait_for(processus.wait(), timeout=KILL_GRACE_SECONDS)
+    except TimeoutError:
+        logger.error("Processus %s encore vivant après arrêt forcé", processus.pid)
+
+
 async def run_bounded(arguments: list[str], cwd: Path, log_path: Path, timeout_s: int) -> int:
     """Lance un processus, journalise dans un fichier, borne sa durée.
 
@@ -357,8 +366,10 @@ async def run_bounded(arguments: list[str], cwd: Path, log_path: Path, timeout_s
     **L'entrée standard est fermée.** Un moteur LaTeX qui réclame une réponse
     interactive échoue au lieu d'attendre indéfiniment.
 
-    **Au dépassement, c'est l'arbre entier qui est tué**, puis son extinction
-    attendue un temps borné.
+    **Au dépassement comme à l'annulation, c'est l'arbre entier qui est tué**,
+    puis son extinction attendue un temps borné. L'annulation — un arrêt du
+    service pendant une compilation — lève `CancelledError` et non
+    `TimeoutError` : sans ce second cas, Quarto continuait seul, orphelin.
     """
     journal = await asyncio.to_thread(open, log_path, "wb")
     try:
@@ -374,12 +385,11 @@ async def run_bounded(arguments: list[str], cwd: Path, log_path: Path, timeout_s
         try:
             return await asyncio.wait_for(processus.wait(), timeout=timeout_s)
         except TimeoutError:
-            await _tuer_arbre(processus.pid)
-            try:
-                await asyncio.wait_for(processus.wait(), timeout=KILL_GRACE_SECONDS)
-            except TimeoutError:
-                logger.error("Processus %s encore vivant après arrêt forcé", processus.pid)
+            await _arreter(processus)
             raise CompilationTimeoutError.after(timeout_s) from None
+        except asyncio.CancelledError:
+            await _arreter(processus)
+            raise
     finally:
         await asyncio.to_thread(journal.close)
 

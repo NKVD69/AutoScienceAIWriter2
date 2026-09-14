@@ -236,6 +236,21 @@ def test_user_message_states_the_closed_key_list() -> None:
     assert "src1_2021_filtration, src2_2019_exposition" in message
 
 
+def test_user_message_requires_declared_keys_to_be_cited_in_text() -> None:
+    """V4 rejette une cle declaree mais absente du texte. Le modele doit le
+    savoir avant d'ecrire, plutot que de l'apprendre par un rejet qui coute un
+    essai sur trois — et un quart d'heure de generation."""
+    message = build_user_message(contexte())
+    assert "apparaît dans content_qmd" in message
+    assert "[@" in message
+
+
+def test_system_prompt_requires_declared_keys_to_be_cited_in_text() -> None:
+    prompt = get_system_prompt(AgentName.WRITER)
+    assert "figure aussi dans le texte" in prompt
+    assert "{" not in prompt and "}" not in prompt
+
+
 def test_user_message_carries_title_objective_and_target() -> None:
     message = build_user_message(contexte())
     assert contexte().node_title in message

@@ -46,6 +46,7 @@ from app.export.assembler import AssembledDocument, assemble
 from app.export.bibliography import BibEntry, build_bibliography, includable_sections
 from app.models.audit import AuditEventType
 from app.models.plan import PlanOut
+from app.models.project import LANGUAGE_TAG_PATTERN
 from app.services import audit_service, plan_service
 
 logger = get_logger(__name__)
@@ -65,8 +66,9 @@ NUMBER_DEPTH = 4
 # Un nom de gabarit est un segment de répertoire, et rien d'autre : ni
 # séparateur, ni remontée, ni lecteur, ni chemin UNC.
 TEMPLATE_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
-# Étiquette de langue BCP 47 simplifiée : `fr`, `en-GB`, `zh-Hans`.
-LANGUAGE_TAG = re.compile(r"^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$")
+# Même définition que le contrat et que le modèle d'entrée. Revérifiée ici
+# parce qu'un fichier projet reçu d'un tiers n'est jamais passé par l'API.
+LANGUAGE_TAG = re.compile(LANGUAGE_TAG_PATTERN)
 
 Format = Literal["pdf", "docx", "html"]
 
@@ -101,7 +103,7 @@ class ExportRequest(BaseModel):
     def _gabarit_connu(cls, valeur: str) -> str:
         """Le motif est vérifié AVANT tout accès disque : un chemin UNC ne doit
         même pas être sondé, sa simple résolution sortant sur le réseau."""
-        if not TEMPLATE_NAME.match(valeur) or not (TEMPLATES_DIR / valeur).is_dir():
+        if not TEMPLATE_NAME.fullmatch(valeur) or not (TEMPLATES_DIR / valeur).is_dir():
             disponibles = ", ".join(sorted(p.name for p in TEMPLATES_DIR.iterdir() if p.is_dir()))
             raise ValueError(f"Gabarit {valeur!r} inconnu. Gabarits disponibles : {disponibles}.")
         return valeur
@@ -166,7 +168,10 @@ def valider_langue(langue: str) -> str:
     arbitraire faisait échouer l'export sur une erreur système opaque —
     mesuré sur Quarto 1.10.18.
     """
-    if not LANGUAGE_TAG.match(langue):
+    # `fullmatch`, pas `match` : en Python, `$` accepte un saut de ligne final,
+    # et « fr » suivi d'un saut de ligne passait ici alors que le contrat,
+    # appliqué par pydantic-core, le refuse.
+    if not LANGUAGE_TAG.fullmatch(langue):
         raise InvalidProjectLanguageError.for_value(langue)
     return langue
 
