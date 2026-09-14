@@ -132,9 +132,11 @@ async def capabilities() -> Capabilities:
         vram_total_mb=vram,
         ollama_available=moteur_joignable,
         llm_model_loaded=modele_resident,
-        # Le second résident exige 12 Go de VRAM ET l'option activée (ADR-003).
+        # Le second résident exige 12 Go de VRAM, l'option activée (ADR-003) ET
+        # un identifiant de modèle de code pour le moteur actif.
         code_model_available=(
             settings.code_model_enabled
+            and settings.code_model is not None
             and vram is not None
             and vram >= settings.code_model_min_vram_mb
         ),

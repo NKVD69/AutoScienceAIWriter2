@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -41,11 +42,17 @@ class Settings(BaseSettings):
     max_open_projects: int = 5
 
     # --- LLM (ADR-003, ADR-014) ------------------------------------------
-    # Moteur d'inférence local : "lmstudio" ou "ollama". Les deux vivent
-    # derrière `LLMBackend` ; changer de moteur impose de changer aussi
-    # `llm_model`, les identifiants de modèles n'étant pas interchangeables.
-    llm_backend: str = "lmstudio"
-    llm_model: str = "google/gemma-4-31b"
+    # Moteur d'inférence local : "lmstudio" ou "ollama", indifféremment. Les
+    # deux vivent derrière `LLMBackend`, et basculer ne demande que
+    # SAW_LLM_BACKEND. Chaque moteur a donc son propre identifiant de modèle :
+    # les identifiants ne passent pas d'un moteur à l'autre — `google/gemma-4-31b`
+    # n'existe pas chez Ollama. Un réglage unique obligeait à changer aussi le
+    # modèle en changeant de moteur, faute de quoi le moteur recevait
+    # l'identifiant de l'autre.
+    llm_backend: Literal["lmstudio", "ollama"] = "lmstudio"
+    # ADR-015 : le même modèle 31B, sous l'identifiant propre à chaque moteur.
+    lmstudio_model: str = "google/gemma-4-31b"
+    ollama_model: str = "gemma4:31b"
     llm_context_tokens: int = 8192
     llm_temperature_default: float = 0.2
     # Seuils observables. `load_duration` atteste la persistance des poids
@@ -70,7 +77,11 @@ class Settings(BaseSettings):
     # plafond contre un état pathologique — thrashing, disque saturé.
     llm_max_ttft_ms: int = 300_000
     code_model_enabled: bool = False
-    code_model: str = "qwen/qwen3-coder-next"
+    # Second résident réservé à l'agent code, lui aussi par moteur. Aucun
+    # identifiant Ollama n'est supposé par défaut : l'option est refusée, avec
+    # un message, tant que SAW_OLLAMA_CODE_MODEL n'est pas renseigné.
+    lmstudio_code_model: str | None = "qwen/qwen3-coder-next"
+    ollama_code_model: str | None = None
     code_model_min_vram_mb: int = 12_288
     # ADR-015 : le plafond de 9 216 Mo de §12.1 ne gouverne plus. Le modèle
     # retenu sature délibérément la VRAM et déverse le reste en RAM ; la
@@ -107,6 +118,18 @@ class Settings(BaseSettings):
     def llm_base_url(self) -> str:
         """URL du moteur actif. Un seul réglage à changer pour basculer."""
         return self.lmstudio_base_url if self.llm_backend == "lmstudio" else self.ollama_base_url
+
+    @property
+    def llm_model(self) -> str:
+        """Modèle du moteur actif, sous l'identifiant que ce moteur connaît."""
+        return self.lmstudio_model if self.llm_backend == "lmstudio" else self.ollama_model
+
+    @property
+    def code_model(self) -> str | None:
+        """Second modèle du moteur actif, ou None s'il n'est pas configuré."""
+        if self.llm_backend == "lmstudio":
+            return self.lmstudio_code_model
+        return self.ollama_code_model
 
     # --- Embeddings (ADR-013) --------------------------------------------
     # Calculés sur CPU, hors du serveur d'inférence : l'y router chargerait

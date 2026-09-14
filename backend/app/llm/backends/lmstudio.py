@@ -48,7 +48,9 @@ class LMStudioBackend:
 
     def __init__(self, model: str | None = None, base_url: str | None = None) -> None:
         settings = get_settings()
-        self.model = model or settings.llm_model
+        # Le modèle de LM STUDIO, pas celui du moteur actif : sous Ollama, ce
+        # dernier est un identifiant que LM Studio ne connaît pas.
+        self.model = model or settings.lmstudio_model
         self.base_url = (base_url or settings.lmstudio_base_url).rstrip("/")
         self.ttl_seconds = settings.lmstudio_ttl_seconds
         self._client = httpx.AsyncClient(

@@ -169,7 +169,15 @@ def build_manager(
     principal = factory(settings.llm_model)  # type: ignore[call-arg]
 
     code_backend: LLMBackend | None = None
-    if settings.code_model_enabled:
+    if settings.code_model_enabled and settings.code_model is None:
+        logger.warning(
+            "Option code_model_enabled refusée : aucun modèle de code n'est configuré "
+            "pour le moteur « %s » (SAW_%s_CODE_MODEL). Le modèle généraliste assurera "
+            "la génération de code.",
+            settings.llm_backend,
+            settings.llm_backend.upper(),
+        )
+    elif settings.code_model_enabled:
         total = read_vram_total_mb()
         if policy_allows_code_model(total):
             code_backend = factory(settings.code_model)  # type: ignore[call-arg]

@@ -265,20 +265,93 @@ async def test_code_model_refused_when_vram_unknown(monkeypatch: pytest.MonkeyPa
     assert not build_manager(backend_factory=FakeBackend).code_model_loaded
 
 
+# --- Moteur interchangeable -----------------------------------------------
+
+
+async def test_each_backend_defaults_to_its_own_engine_model() -> None:
+    """Les identifiants de modeles ne passent pas d'un moteur a l'autre :
+    `google/gemma-4-31b` n'existe pas chez Ollama. Chaque backend prenait
+    pourtant par defaut le modele du moteur ACTIF : un OllamaBackend recevait
+    l'identifiant LM Studio, et ses tests d'integration echouaient sur un
+    modele introuvable."""
+    from app.llm.backends.lmstudio import LMStudioBackend
+
+    settings = get_settings()
+    assert settings.llm_backend == "lmstudio"
+    ollama, lmstudio = OllamaBackend(), LMStudioBackend()
+    try:
+        assert ollama.model == settings.ollama_model
+        assert lmstudio.model == settings.lmstudio_model
+    finally:
+        await ollama.aclose()
+        await lmstudio.aclose()
+
+
+async def test_switching_backend_alone_switches_model_and_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """« LM Studio ou Ollama, indifferemment » : basculer ne demande que
+    SAW_LLM_BACKEND. Il fallait changer aussi SAW_LLM_MODEL, faute de quoi le
+    moteur recevait un identifiant qu'il ne connait pas."""
+    settings = get_settings()
+    monkeypatch.setattr(settings, "llm_backend", "ollama")
+
+    assert settings.llm_model == settings.ollama_model
+    assert settings.llm_base_url == settings.ollama_base_url
+
+    backend = build_manager().backend_for(AgentName.PLAN)
+    try:
+        assert isinstance(backend, OllamaBackend)
+        assert backend.model == settings.ollama_model
+    finally:
+        await backend.aclose()
+
+
+def test_code_model_follows_the_active_engine(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Le second modele suit le moteur actif. Sans identifiant configure pour
+    ce moteur, l'option est refusee — jamais tentee avec l'identifiant d'un
+    autre moteur."""
+    settings = get_settings()
+    monkeypatch.setattr(settings, "code_model_enabled", True)
+    monkeypatch.setattr("app.llm.manager.read_vram_total_mb", lambda: 24_576)
+    assert settings.code_model == settings.lmstudio_code_model
+
+    monkeypatch.setattr(settings, "llm_backend", "ollama")
+    monkeypatch.setattr(settings, "ollama_code_model", None)
+    assert settings.code_model is None
+    assert not build_manager(backend_factory=FakeBackend).code_model_loaded
+
+
 # --- Integration : necessite un Ollama reel -------------------------------
 
 
-def _ollama_absent() -> bool:
+def _raison_ollama_indisponible() -> str | None:
+    """Raison d'ignorer les tests Ollama, ou None s'ils peuvent tourner.
+
+    La sonde vise `ollama_base_url`, pas l'URL du moteur actif : elle
+    interrogeait LM Studio, qui repondait, et les tests Ollama tournaient
+    alors contre un modele qu'Ollama n'a pas. Le modele attendu est lui aussi
+    verifie, puisqu'il n'est jamais telecharge d'office (ADR-010).
+    """
     if os.environ.get("SAW_SKIP_OLLAMA"):
-        return True
+        return "SAW_SKIP_OLLAMA defini"
+    settings = get_settings()
     try:
         with httpx.Client(timeout=2.0) as client:
-            return client.get(f"{get_settings().llm_base_url}/api/tags").status_code != 200
+            reponse = client.get(f"{settings.ollama_base_url}/api/tags")
     except httpx.HTTPError:
-        return True
+        return f"Ollama injoignable sur {settings.ollama_base_url}"
+    if reponse.status_code != 200:
+        return f"Ollama injoignable sur {settings.ollama_base_url}"
+    installes = {m.get("name") for m in reponse.json().get("models", [])}
+    attendu = settings.ollama_model
+    if attendu not in installes and f"{attendu}:latest" not in installes:
+        return f"modele {attendu} absent d'Ollama (ollama pull {attendu})"
+    return None
 
 
-needs_ollama = pytest.mark.skipif(_ollama_absent(), reason="Ollama injoignable")
+_RAISON_OLLAMA = _raison_ollama_indisponible()
+needs_ollama = pytest.mark.skipif(_RAISON_OLLAMA is not None, reason=_RAISON_OLLAMA or "")
 
 
 @pytest.mark.integration

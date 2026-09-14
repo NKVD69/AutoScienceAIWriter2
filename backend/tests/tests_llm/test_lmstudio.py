@@ -109,6 +109,10 @@ def test_default_model_is_documented() -> None:
     """
     settings = get_settings()
     assert settings.llm_model == "google/gemma-4-31b"
+    # Le meme modele sous l'identifiant propre a chaque moteur : basculer de
+    # moteur ne change pas de modele.
+    assert settings.lmstudio_model == "google/gemma-4-31b"
+    assert settings.ollama_model == "gemma4:31b"
     assert settings.vram_offload_expected is True
 
 
@@ -286,14 +290,23 @@ async def test_missing_model_proposes_command_without_downloading() -> None:
 
 
 def _lmstudio_absent() -> bool:
+    """LM Studio injoignable, ou modele attendu non installe.
+
+    Le modele est verifie comme pour Ollama : il n'est jamais telecharge
+    d'office (ADR-010), et un test lance sans lui echouerait pour une raison
+    d'environnement, pas de code.
+    """
     if os.environ.get("SAW_SKIP_LMSTUDIO"):
         return True
+    settings = get_settings()
     try:
         with httpx.Client(timeout=2.0) as client:
-            url = f"{get_settings().lmstudio_base_url}/api/v0/models"
-            return client.get(url).status_code != 200
+            reponse = client.get(f"{settings.lmstudio_base_url}/api/v0/models")
     except httpx.HTTPError:
         return True
+    if reponse.status_code != 200:
+        return True
+    return settings.lmstudio_model not in {m.get("id") for m in reponse.json().get("data", [])}
 
 
 needs_lmstudio = pytest.mark.skipif(_lmstudio_absent(), reason="LM Studio injoignable")
@@ -322,4 +335,6 @@ async def test_model_stays_resident_across_requests() -> None:
     await manager.generate_for_agent(AgentName.WRITER, "Reponds par OK.", max_tokens=8)
     health = await manager.health()
     await backend.aclose()
-    assert health.is_resident(settings.llm_model)
+    # Le modele de LM Studio, et non celui du moteur actif : ce test doit
+    # rester vrai quand SAW_LLM_BACKEND designe Ollama.
+    assert health.is_resident(settings.lmstudio_model)
