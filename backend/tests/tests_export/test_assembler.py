@@ -261,6 +261,29 @@ async def test_chapter_with_its_own_text_keeps_it(project_db: Path) -> None:
     assert 1 in [n.node_id for n in document.included()]
 
 
+async def test_node_title_cannot_open_a_block(project_db: Path) -> None:
+    """Un titre lu depuis un fichier projet recu d'un tiers ne passe par aucun
+    validateur : l'assembleur l'aplatit sur une seule ligne. Un saut de ligne
+    y ouvrirait sinon un bloc autonome, jusqu'a un shortcode Quarto que la
+    compilation execute — inclusion d'un fichier local dans le document
+    exporte. Constat de revue de securite, reproduit."""
+    hostile = "Introduction" + chr(10) + chr(10) + "{{< include ../secret.txt >}}"
+    await peupler(project_db, {1: "Corps du chapitre."})
+    plan_hostile = plan()
+    plan_hostile.nodes[0].title = hostile
+
+    async with connect(project_db) as conn:
+        document = await assemble(conn, plan_hostile, sections_par_noeud([1]))
+
+    lignes = document.qmd.splitlines()
+    # La propriete de securite : aucune ligne n'est un bloc autonome ouvert par
+    # le shortcode. Le titre, aplati, reste sur sa ligne d'en-tete avec l'ancre.
+    assert not any(ligne.lstrip().startswith("{{<") for ligne in lignes)
+    entete = next(ligne for ligne in lignes if ligne.startswith("# "))
+    assert "{#sec-" in entete
+    assert chr(10) not in document.nodes[0].title
+
+
 # --- Cles de citation -----------------------------------------------------
 
 

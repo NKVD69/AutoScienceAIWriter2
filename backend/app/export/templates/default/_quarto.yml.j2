@@ -30,6 +30,14 @@ csl: {{ csl|tojson }}
 number-sections: true
 number-depth: {{ number_depth }}
 
+# Le code s'exécute dans le bac à sable (ADR-005), jamais via Quarto : la
+# compilation ne fait que composer du Markdown et des figures statiques.
+# Désactiver l'exécution ferme la moitié « code » d'une injection par
+# document — une cellule ```{python}``` glissée dans un projet reçu d'un
+# tiers — sans rien retirer d'utile.
+execute:
+  enabled: false
+
 crossref:
   fig-title: Figure
   tbl-title: Tableau

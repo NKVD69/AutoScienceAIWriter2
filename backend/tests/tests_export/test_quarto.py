@@ -323,6 +323,16 @@ def test_quarto_yml_enables_numbering_and_crossref() -> None:
     assert config["crossref"]["tbl-title"] == "Tableau"
 
 
+def test_quarto_yml_disables_code_execution() -> None:
+    """Dans cette architecture, le code s'exécute dans le bac à sable
+    (ADR-005), jamais via Quarto : la compilation ne fait que composer du
+    Markdown et des figures statiques. Désactiver l'exécution ferme la moitié
+    « code » de l'injection par document — une cellule ```{python}``` glissée
+    dans un projet reçu d'un tiers — sans rien retirer d'utile aujourd'hui."""
+    config = _config()
+    assert config["execute"]["enabled"] is False
+
+
 # --- Durcissement : constats de la revue securite -------------------------
 
 

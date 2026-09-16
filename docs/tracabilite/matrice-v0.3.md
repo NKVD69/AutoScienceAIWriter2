@@ -197,6 +197,8 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | Altération du journal | `test_tamper_detection_returns_index` | US-701 |
 | Export cassé sur 300 pages | `check_quarto_export.py`, `test_log_parser_detects_unresolved_crossref` | US-502 |
 | Exécution de commande via un projet reçu d'un tiers | `test_quarto_yml_survives_any_project_name`, `test_quarto_yml_refuses_an_invalid_project_language` | US-502 |
+| Inclusion de fichier via un titre de nœud | `test_plan_node_title_rejects_control_characters`, `test_node_title_cannot_open_a_block` | US-502 |
+| Exécution de code à la compilation Quarto | `test_quarto_yml_disables_code_execution` | US-502 |
 | Versions de section dupliquées sous concurrence | `test_concurrent_drafts_get_distinct_versions` | US-301 |
 | Compilation sans fin, processus orphelins | `test_timeout_kills_the_whole_process_tree` | US-502 |
 

@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 from enum import StrEnum
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 # Définition unique, du côté de la section (US-301). Une seconde énumération
 # du même nom existait ici, sans GUARDRAIL ni CORRECTING : dès qu'une section
@@ -32,6 +32,33 @@ MAX_ROOT_NODES = 12
 MIN_CHILDREN = 2
 WORD_BUDGET_LOW = 0.7
 WORD_BUDGET_HIGH = 1.3
+
+# Caractères de contrôle interdits dans un titre : C0 (dont saut de ligne,
+# retour chariot, tabulation, NUL), DEL, C1, et les séparateurs Unicode de
+# ligne (U+2028) et de paragraphe (U+2029). Un titre entre TEL QUEL dans le
+# document assemblé ; un saut de ligne y ouvrirait un bloc autonome, jusqu'à
+# un shortcode Quarto exécuté à la compilation — inclusion d'un fichier local
+# dans le document exporté (constat de revue de sécurité). Un titre est une
+# ligne de texte simple ; les accents et la ponctuation restent admis. Définis
+# par leurs ordinaux, jamais écrits en clair : pas de caractère invisible dans
+# la source.
+FORBIDDEN_TITLE_ORDINALS = (
+    frozenset(range(0x00, 0x20)) | frozenset(range(0x7F, 0xA0)) | {0x2028, 0x2029}
+)
+
+
+def reject_control_chars(valeur: str | None) -> str | None:
+    """Refuse un titre porteur d'un caractère de contrôle. Sert de validateur
+    de champ, partagé par les trois modèles qui portent un titre."""
+    if valeur is not None and any(ord(c) in FORBIDDEN_TITLE_ORDINALS for c in valeur):
+        raise ValueError(
+            "Le titre contient un caractère de contrôle (saut de ligne, tabulation, "
+            "NUL…). Un titre est une ligne de texte simple : il entre tel quel dans "
+            "le document exporté, où un saut de ligne ouvrirait un bloc — jusqu'à un "
+            "shortcode Quarto exécuté à la compilation."
+        )
+    return valeur
+
 
 # Clés de citation Quarto et LaTeX. Repéré syntaxiquement, donc fiable :
 # le contrôle ne dépend pas du jugement d'un modèle (§5.5).
@@ -64,6 +91,8 @@ class PlanNode(BaseModel):
     objective: str = Field(min_length=10)
     target_words: int = Field(ge=150, le=20_000)
     children: list[PlanNode] = []
+
+    _titre_propre = field_validator("title")(reject_control_chars)
 
     @model_validator(mode="after")
     def _structure(self) -> PlanNode:
@@ -185,6 +214,8 @@ class PlanNodeUpdate(BaseModel):
     objective: str | None = None
     target_words: int | None = Field(default=None, ge=150, le=20_000)
 
+    _titre_propre = field_validator("title")(reject_control_chars)
+
 
 class PlanNodeCreate(BaseModel):
     parent_id: int | None = None
@@ -192,6 +223,8 @@ class PlanNodeCreate(BaseModel):
     objective: str = Field(min_length=10)
     target_words: int = Field(ge=150, le=20_000)
     ordinal: int | None = None
+
+    _titre_propre = field_validator("title")(reject_control_chars)
 
 
 class ReorderItem(BaseModel):

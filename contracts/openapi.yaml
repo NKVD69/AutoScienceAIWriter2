@@ -1083,7 +1083,16 @@ components:
       properties:
         id: { type: integer }
         parent_id: { type: integer, nullable: true }
-        title: { type: string, minLength: 3, maxLength: 200 }
+        title:
+          type: string
+          minLength: 3
+          maxLength: 200
+          description: |
+            Ligne de texte simple. Les caractères de contrôle (saut de ligne,
+            tabulation, NUL, séparateurs Unicode) sont refusés en 422 : un
+            titre entre tel quel dans le document exporté, où un saut de ligne
+            ouvrirait un bloc — jusqu'à un shortcode Quarto exécuté à la
+            compilation.
         objective: { type: string }
         target_words: { type: integer, minimum: 150, maximum: 20000 }
         level: { type: integer, minimum: 1, maximum: 5 }
@@ -1100,7 +1109,11 @@ components:
       type: object
       required: [title, objective, target_words, parent_id, ordinal]
       properties:
-        title: { type: string }
+        title:
+          type: string
+          minLength: 3
+          maxLength: 200
+          description: Ligne de texte simple ; caractères de contrôle refusés en 422 (cf. PlanNode.title).
         objective: { type: string }
         target_words: { type: integer }
         parent_id: { type: integer, nullable: true }
@@ -1109,7 +1122,11 @@ components:
     PlanNodeUpdate:
       type: object
       properties:
-        title: { type: string }
+        title:
+          type: string
+          minLength: 3
+          maxLength: 200
+          description: Ligne de texte simple ; caractères de contrôle refusés en 422 (cf. PlanNode.title).
         objective: { type: string }
         target_words: { type: integer }
 

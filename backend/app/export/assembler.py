@@ -79,6 +79,18 @@ class AssembledDocument(BaseModel):
         return [n for n in self.nodes if n.section_id is not None]
 
 
+def one_line(texte: str) -> str:
+    """Réduit un titre à une seule ligne, espaces multiples compris.
+
+    Défense pour le chemin qui ne passe par aucun validateur : un titre lu
+    depuis un fichier projet reçu d'un tiers. `str.split()` sépare sur tout
+    blanc Unicode — sauts de ligne, tabulations, séparateurs U+2028/U+2029 —
+    et retire donc ce par quoi un titre ouvrirait un bloc autonome, jusqu'à un
+    shortcode Quarto exécuté à la compilation (constat de revue de sécurité).
+    """
+    return " ".join(texte.split())
+
+
 def slugify(texte: str) -> str:
     """Slug ASCII, stable et borné."""
     decompose = unicodedata.normalize("NFKD", texte)
@@ -202,8 +214,11 @@ async def assemble(
         section_id = sections_par_noeud.get(noeud.id)
         corps = rewrite_citation_keys(contenus.get(section_id, ""), correspondance).strip()
         conteneur = bool(noeud.children)
+        # Aplati systématiquement : un titre venu de la base n'a pas forcément
+        # traversé le validateur du modèle (fichier projet reçu d'un tiers).
+        titre = one_line(noeud.title)
 
-        morceaux.append(f"{'#' * niveau} {noeud.title} {{#{ancre}}}")
+        morceaux.append(f"{'#' * niveau} {titre} {{#{ancre}}}")
         if corps:
             # Texte propre — y compris le chapeau d'un chapitre.
             morceaux.append(corps)
@@ -212,7 +227,7 @@ async def assemble(
         assembles.append(
             AssembledNode(
                 node_id=noeud.id,
-                title=noeud.title,
+                title=titre,
                 level=niveau,
                 section_id=section_id if corps else None,
                 anchor=ancre,
