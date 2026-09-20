@@ -105,6 +105,28 @@ class Settings(BaseSettings):
     # syntaxiques de §5.5, pas par la prudence du modèle.
     writer_temperature: float = 0.3
 
+    # --- Relecture (US-302) ----------------------------------------------
+    # Basse : une évaluation doit être aussi reproductible que possible. Deux
+    # relectures du même texte ne devraient pas donner deux verdicts.
+    reviewer_temperature: float = 0.1
+    # Poids des six catégories dans le score global. Le sourçage pèse le plus :
+    # c'est ce qui distingue un mémoire d'un devoir. La somme est vérifiée à 1.0
+    # au démarrage (échouer tôt vaut mieux qu'un score faux à chaque relecture).
+    review_weights: dict[str, float] = Field(
+        default_factory=lambda: {
+            "sourcing": 0.30,
+            "coherence": 0.25,
+            "argumentation": 0.20,
+            "completeness": 0.15,
+            "structure": 0.05,
+            "style": 0.05,
+        }
+    )
+    # Boucle de correction : au-delà, pause et proposition de la meilleure
+    # version (US-202). Les modèles 7B dégradent souvent leur sortie en
+    # corrigeant, d'où « meilleure » et non « dernière ».
+    max_review_loops: int = 3
+
     # Ollama — conservé derrière l'interface (ADR-003 point 5).
     ollama_base_url: str = "http://127.0.0.1:11434"
 
@@ -190,6 +212,23 @@ class Settings(BaseSettings):
         produit à une date, et un mémoire se relit sur des mois.
         """
         return self.data_dir / "exports" / str(project_id)
+
+    def assert_review_weights(self) -> None:
+        """Vérifie les six catégories et une somme de poids à 1.0 (US-302).
+
+        Appelée au démarrage : un poids mal réglé produirait un score faux à
+        chaque relecture, sans jamais lever. Échouer tôt le rend visible.
+        """
+        attendues = {"sourcing", "coherence", "argumentation", "completeness", "structure", "style"}
+        presentes = set(self.review_weights)
+        if presentes != attendues:
+            raise ValueError(
+                f"review_weights doit porter exactement les six catégories {sorted(attendues)} ; "
+                f"reçu {sorted(presentes)}."
+            )
+        total = sum(self.review_weights.values())
+        if abs(total - 1.0) > 1e-6:
+            raise ValueError(f"La somme des review_weights doit valoir 1.0 ; reçu {total}.")
 
 
 @lru_cache(maxsize=1)

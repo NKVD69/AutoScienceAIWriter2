@@ -40,13 +40,13 @@ async def test_discover_is_ordered(migrations_copy: Path) -> None:
     (migrations_copy / "007_sept.sql").write_text("SELECT 1;", encoding="utf-8")
     versions = [v for v, _ in discover(migrations_copy)]
     assert versions == sorted(versions)
-    assert versions == [1, 2, 3, 4, 5, 7, 10]
+    assert versions == [1, 2, 3, 4, 5, 6, 7, 10]
 
 
 async def test_migrations_apply_schema(project_db: Path) -> None:
     async with connect(project_db) as conn:
         applied = await run_migrations(conn)
-        assert applied == [1, 2, 3, 4, 5]
+        assert applied == [1, 2, 3, 4, 5, 6]
         async with conn.execute(
             "SELECT name FROM sqlite_master WHERE type IN ('table','trigger')"
         ) as cur:
@@ -100,9 +100,9 @@ async def test_migrations_idempotent(project_db: Path) -> None:
         first = await run_migrations(conn)
         second = await run_migrations(conn)
         versions = await applied_versions(conn)
-    assert first == [1, 2, 3, 4, 5]
+    assert first == [1, 2, 3, 4, 5, 6]
     assert second == []
-    assert set(versions) == {1, 2, 3, 4, 5}
+    assert set(versions) == {1, 2, 3, 4, 5, 6}
 
 
 async def test_migrations_detect_modified_file(project_db: Path, migrations_copy: Path) -> None:

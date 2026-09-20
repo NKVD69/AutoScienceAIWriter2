@@ -40,6 +40,9 @@ def describe_validation_error(erreur: dict) -> str:
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     configure_logging(settings.log_level)
+    # Échoue tôt : des poids de relecture mal réglés produiraient un score faux
+    # à chaque relecture sans jamais lever (US-302).
+    settings.assert_review_weights()
     settings.projects_dir.mkdir(parents=True, exist_ok=True)
     logger.info("Science AI Writer IDE %s — données : %s", settings.version, settings.data_dir)
 

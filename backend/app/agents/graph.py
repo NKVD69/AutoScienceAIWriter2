@@ -157,3 +157,24 @@ def section_guardrail_target(ok: bool, breaker_tripped: bool) -> WorkflowState:
     if breaker_tripped:
         return WorkflowState.ERROR_STATE
     return WorkflowState.SECTION_DRAFTING
+
+
+def review_target(verdict: str, auto_correct: bool, breaker_tripped: bool) -> WorkflowState | None:
+    """Cible après une relecture (US-302). Ne mène JAMAIS à SECTION_VALIDATED.
+
+    La relecture conseille, elle ne valide pas : la seule sortie vers
+    `SECTION_VALIDATED` est la porte humaine (ADR-004). Une relecture qui
+    demande une correction, et dont l'auteur a demandé la correction
+    automatique, repart vers le rédacteur ; tout le reste s'arrête et attend
+    l'humain — `None`.
+
+    - plafond de boucles atteint : pause, la meilleure version est proposée ;
+    - verdict « ready » : rien à corriger, on attend la validation humaine ;
+    - « needs_work »/« insufficient » sans correction demandée : idem ;
+    - avec correction demandée : retour à `SECTION_CORRECTING`.
+    """
+    if breaker_tripped or verdict == "ready":
+        return None
+    if auto_correct and verdict in ("needs_work", "insufficient"):
+        return WorkflowState.SECTION_CORRECTING
+    return None

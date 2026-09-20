@@ -96,7 +96,11 @@ CREATE TABLE draft_section (
   quality_score REAL,
   version       INTEGER NOT NULL DEFAULT 1,
   generated_at  TEXT,
-  validated_at  TEXT
+  validated_at  TEXT,
+  -- US-302 : comptes persistés à la rédaction, pour mesurer sourçage et
+  -- complétude en Python plutôt que de les faire estimer par le modèle.
+  claim_count         INTEGER NOT NULL DEFAULT 0,
+  sourced_claim_count INTEGER NOT NULL DEFAULT 0
 );
 
 -- citation.source_id est en RESTRICT délibérément (spécifications §4.2) :
@@ -111,6 +115,19 @@ CREATE TABLE citation (
   bibtex_key       TEXT NOT NULL,
   locator          TEXT,
   verified         INTEGER NOT NULL DEFAULT 0 CHECK (verified IN (0,1))
+);
+
+-- Relecture et score de qualité (US-302). Un rapport par version de section,
+-- conservé pour la comparaison ; jamais écrasé.
+CREATE TABLE review_report (
+  id               INTEGER PRIMARY KEY,
+  draft_section_id INTEGER NOT NULL REFERENCES draft_section(id) ON DELETE CASCADE,
+  overall_score    REAL NOT NULL,
+  verdict          TEXT NOT NULL,
+  scores_json      TEXT NOT NULL,
+  findings_json    TEXT NOT NULL,
+  auto_correct     INTEGER NOT NULL DEFAULT 0 CHECK (auto_correct IN (0,1)),
+  created_at       TEXT NOT NULL
 );
 
 CREATE TABLE code_execution (
@@ -201,3 +218,4 @@ CREATE INDEX idx_audit_project    ON audit_log(project_id, id);
 CREATE UNIQUE INDEX idx_audit_prev ON audit_log(project_id, prev_hash);
 CREATE INDEX idx_chunk_section ON chunk(source_id, section_kind);
 CREATE INDEX idx_draft_status ON draft_section(status);
+CREATE INDEX idx_review_section ON review_report(draft_section_id, id);

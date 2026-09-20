@@ -185,10 +185,21 @@ async def save_draft(
         ) as lecture:
             version = int((await lecture.fetchone())[0]) + 1
 
+        # Comptes persistés pour US-302 : la relecture mesure le sourçage sur
+        # eux, plutôt que de le faire estimer au modèle. Les affirmations non
+        # sourcées ne laissent aucune autre trace (pas de citation).
         cur = await conn.execute(
             "INSERT INTO draft_section (plan_node_id, content_qmd, status, version,"
-            " generated_at) VALUES (?, ?, ?, ?, ?)",
-            (node_id, draft.content_qmd, str(status), version, _now()),
+            " generated_at, claim_count, sourced_claim_count) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                node_id,
+                draft.content_qmd,
+                str(status),
+                version,
+                _now(),
+                len(draft.claims),
+                len(draft.sourced_claims()),
+            ),
         )
         section_id = int(cur.lastrowid or 0)
 
@@ -319,11 +330,16 @@ async def draft_section(
     node_id: int,
     manager: LLMManager,
     task_id: int | None = None,
+    correction: str | None = None,
 ) -> DraftSectionOut:
     """Rédige une section. Refuse si le plan n'est pas validé ou le RAG trop maigre.
 
     Le contrôle de plan validé vient de US-PLAN-001 : il est consommé, pas
     réimplémenté — un second contrôle finirait par diverger du premier.
+
+    `correction` sème le message de reprise du rédacteur (US-302) : après une
+    relecture, les constats bloquants et majeurs y sont passés, et la nouvelle
+    version est écrite comme une génération de plus — jamais un écrasement.
     """
     plan = await plan_service.assert_writable(conn, project_id)
     noeud = find_node(plan, node_id)
@@ -334,6 +350,7 @@ async def draft_section(
     state["current_node_id"] = node_id
     state["plan_id"] = plan.id
     state["state"] = WorkflowState.SECTION_DRAFTING
+    state["last_error"] = correction
     ctx = {"context": context, "task_id": task_id}
 
     while True:
