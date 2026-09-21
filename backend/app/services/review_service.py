@@ -66,10 +66,14 @@ def _now() -> str:
 
 
 def length_ratio_score(measured_words: int, target_words: int) -> float:
-    """Score de longueur : plein à la cible, nul à mi-cible ou au double.
+    """Score de longueur : plein à la cible, nul à vide ou au double.
 
-    Triangulaire autour de 1,0. Un texte à 60 % de la cible et un à 140 %
-    tombent au même 60 : trop court et trop long sont deux défauts, pas un.
+    Triangulaire autour de 1,0, sur l'écart de ratio : un texte à 60 % de la
+    cible et un à 140 % tombent au même 60 (écart de 0,4 de part et d'autre),
+    trop court et trop long étant deux défauts et non un. La pente est linéaire,
+    donc le zéro n'est atteint qu'aux écarts d'au moins 1,0 — texte vide
+    (ratio 0) ou double de la cible (ratio 2) ; à mi-cible, l'écart n'est que
+    de 0,5 et le score vaut 50.
     """
     if target_words <= 0:
         return 100.0

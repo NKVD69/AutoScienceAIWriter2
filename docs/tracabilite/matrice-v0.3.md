@@ -37,8 +37,8 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | Génération de problématique et de plan | §5.2 | **US-PLAN-001** | **P0** | **Livrée** |
 | Édition et validation du plan | §5.2 | US-PLAN-001 | P0 | **Livrée** |
 | Rédaction de section sourcée | §5.4, §5.5 | US-301 | P1 | **Livrée** |
-| Relecture et score de qualité | §5.4 | US-302 | P1 | À implémenter |
-| Distinction fait sourcé / hypothèse | §5.5 | US-301, US-302 | P1 | **Livrée** (US-301) |
+| Relecture et score de qualité | §5.4 | US-302 | P1 | **Livrée** |
+| Distinction fait sourcé / hypothèse | §5.5 | US-301, US-302 | P1 | **Livrée** |
 | Exécution de code Python | §8 | US-004, US-401 | P0/P1 | À implémenter |
 | Éditeur de code Monaco | §2 | US-UI-003 | P1 | À implémenter |
 | Notebooks Jupyter | — | US-JUP-001 | P2 | Non planifié |
@@ -92,6 +92,12 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | Édition manuelle dévérifiante, non destructrice | ADR-007 | §5.5 | **US-301** | `test_manual_edit_unverifies_removed_citations`, `test_manual_edit_never_deletes_citation_rows` |
 | Circuit breaker | ADR-008 | §5.3 | US-202 | `test_circuit_breaker_pauses_review_loop` |
 | `ERROR_STATE` terminal | ADR-008 | §5.3 | US-202 | `test_error_state_requires_human` |
+| Relecture conseille, ne valide jamais | ADR-004 | §5.4 | **US-302** | `test_review_never_targets_section_validated`, `test_review_reports_the_fond_without_validating_the_section` |
+| Extrait cité = sous-chaîne exacte (seul contrôle de véracité de la relecture) | ADR-008 | §5.4 | **US-302** | `test_a_hallucinated_excerpt_is_rejected`, `test_a_hallucinated_excerpt_is_rejected_by_the_api` |
+| Score global recomposé côté serveur, jamais repris du modèle | ADR-008 | §5.4 | **US-302** | `test_the_model_supplied_overall_score_is_ignored`, `test_overall_score_is_recomputed_from_the_weights` |
+| Sourçage et complétude pour moitié mesurés en Python | ADR-008 | §5.4 | **US-302** | `test_blend_mixes_only_completeness_and_sourcing_half_and_half`, `test_deterministic_measures_report_on_completeness_and_sourcing` |
+| Correction bornée, pause sur la meilleure version | ADR-004 | §5.4 | **US-302** | `test_run_review_caps_corrections_and_pauses_on_the_best_version`, `test_best_scored_section_returns_the_highest_not_the_latest` |
+| Relecteur juge le texte, pas le processus | ADR-004 | §5.4 | **US-302** | `test_reviewer_message_excludes_the_generation_history` |
 | Sandbox Wasm pour code agent | ADR-005 | §8.1, §8.2 | US-004 | `test_sandbox_factory_selects_wasm_for_agent_origin` |
 | Isolation réseau niveau 1 | ADR-005 | §8.2 | US-004 | `test_network_disabled_level1` (Windows **et** Linux) |
 | Isolation disque niveau 1 | ADR-005 | §8.2 | US-004 | `test_filesystem_isolated_level1` |
@@ -153,7 +159,7 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | US-202 | Circuit breaker | P0 | US-201 | ✅ `PROMPT-US-201-202.md` | **Livrée** |
 | **US-PLAN-001** | Plan : génération, édition, validation | P0 | US-003, US-201 | ✅ `PROMPT-US-PLAN-001.md` | **Livrée** |
 | **US-301** | Rédaction de section sourcée | P1 | US-PLAN-001, US-102 | ✅ `PROMPT-US-301.md` | **Livrée** |
-| US-302 | Relecture et score | P1 | US-301 | ✅ `PROMPT-US-302.md` | Prêt |
+| **US-302** | Relecture et score | P1 | US-301 | ✅ `PROMPT-US-302.md` | **Livrée** |
 | US-401 | Exécution de script | P1 | US-004 | ✅ `PROMPT-US-401.md` | Prêt |
 | **US-501** | BibTeX dynamique | P1 | US-301 | ✅ `PROMPT-US-501-502.md` | **Livrée** |
 | **US-502** | Export Quarto | P1 | US-501 | ✅ `PROMPT-US-501-502.md` | **Livrée** |
