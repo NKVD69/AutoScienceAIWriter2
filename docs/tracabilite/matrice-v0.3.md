@@ -39,7 +39,7 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | Rédaction de section sourcée | §5.4, §5.5 | US-301 | P1 | **Livrée** |
 | Relecture et score de qualité | §5.4 | US-302 | P1 | **Livrée** |
 | Distinction fait sourcé / hypothèse | §5.5 | US-301, US-302 | P1 | **Livrée** |
-| Exécution de code Python | §8 | US-004, US-401 | P0/P1 | À implémenter |
+| Exécution de code Python | §8 | US-004, US-401 | P0/P1 | **Livrée** (US-004 : moteur) |
 | Éditeur de code Monaco | §2 | US-UI-003 | P1 | À implémenter |
 | Notebooks Jupyter | — | US-JUP-001 | P2 | Non planifié |
 | Codes externes OpenFOAM / Serpent | §8.3 | US-CALC-001 | P2 | Non planifié |
@@ -98,11 +98,14 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | Sourçage et complétude pour moitié mesurés en Python | ADR-008 | §5.4 | **US-302** | `test_blend_mixes_only_completeness_and_sourcing_half_and_half`, `test_deterministic_measures_report_on_completeness_and_sourcing` |
 | Correction bornée, pause sur la meilleure version | ADR-004 | §5.4 | **US-302** | `test_run_review_caps_corrections_and_pauses_on_the_best_version`, `test_best_scored_section_returns_the_highest_not_the_latest` |
 | Relecteur juge le texte, pas le processus | ADR-004 | §5.4 | **US-302** | `test_reviewer_message_excludes_the_generation_history` |
-| Sandbox Wasm pour code agent | ADR-005 | §8.1, §8.2 | US-004 | `test_sandbox_factory_selects_wasm_for_agent_origin` |
-| Isolation réseau niveau 1 | ADR-005 | §8.2 | US-004 | `test_network_disabled_level1` (Windows **et** Linux) |
-| Isolation disque niveau 1 | ADR-005 | §8.2 | US-004 | `test_filesystem_isolated_level1` |
-| Limites natives niveau 2 | ADR-005 | §8.3 | US-004 | `check_sandbox_windows.py`, `check_sandbox_linux.py` |
-| Consentement niveau 2 | ADR-005 | §8.1 | US-004, US-401 | `test_consent_required_level2` |
+| Sandbox Wasm pour code agent | ADR-005 | §8.1, §8.2 | **US-004** | `test_factory_agent_origin_always_wasm` |
+| Niveau agent abaissé en silence et journalisé | ADR-005 | §8.1 | **US-004** | `test_factory_agent_native_mode_downgraded_and_logged` |
+| Isolation réseau niveau 1 | ADR-005 | §8.2 | **US-004** | `test_wasm_network_blocked` (Windows **et** Linux, jamais skip par plateforme) |
+| Isolation disque niveau 1, montage lecture seule | ADR-005 | §8.2 | **US-004** | `test_wasm_filesystem_isolated_outside_mounts`, `test_wasm_readonly_mount_rejects_write` |
+| Délai mural tenu par le superviseur | ADR-005 | §8.3 | **US-004** | `test_wasm_timeout_enforced`, `test_native_wall_timeout_kills_process_group` |
+| Limites natives niveau 2 (mémoire, CPU) | ADR-005 | §8.3 | **US-004** | `test_native_memory_limit_kills_process`, `test_native_cpu_limit_enforced`, `check_sandbox_windows.py`, `check_sandbox_linux.py` |
+| Réseau NON isolé au niveau 2 Windows, déclaré honnêtement | ADR-005 | §8.2 | **US-004** | `test_native_windows_reports_network_not_guaranteed` |
+| Consentement niveau 2 vérifié et exécution persistée | ADR-005 | §8.1 | **US-004** | `test_native_requires_consent`, `test_execution_persisted_with_level` |
 | Quarto `.qmd` canonique | ADR-006 | §9.1 | **US-502** | `test_assembler_respects_plan_order`, `test_assembler_emits_stable_section_ids` |
 | Absence de MyST canonique | ADR-006 | §9.1 | **US-502** | `test_no_myst_syntax_in_assembled_document` |
 | Renvois croisés résolus | ADR-006 | §9.2 | **US-502** | `test_log_parser_detects_unresolved_crossref`, `check_quarto_export.py` |
@@ -149,7 +152,7 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | US-001 | Backend FastAPI + aiosqlite WAL | P0 | — | ✅ Prompt Pack V0.2 | **Livrée** |
 | **US-002** | Schéma SQLite + sqlite-vec | P0 | US-001 | ✅ `PROMPT-US-002.md` | **Livrée** |
 | US-003 | LLM Manager persistant | P0 | — | ✅ `PROMPT-US-003.md` | **Livrée** |
-| US-004 | Sandbox à deux niveaux | P0 | US-001 | ✅ `PROMPT-US-004.md` | Prêt |
+| **US-004** | Sandbox à deux niveaux | P0 | US-001 | ✅ `PROMPT-US-004.md` | **Livrée** |
 | **US-005** | Embeddings CPU hors Ollama | P0 | US-002 | ✅ `PROMPT-US-005.md` | **Livrée** |
 | **US-006** | Budget VRAM en CI | P0 | US-003, US-005 | ✅ `PROMPT-US-006.md` | Prêt |
 | US-101 | CRUD projets | P0 | US-002 | ✅ `PROMPT-US-101.md` | **Livrée** |
@@ -195,7 +198,7 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | Statistique non sourcée | `test_v2_numeric_claim_without_chunk_rejected` | US-301 |
 | Section rédigée sans matière | `test_context_insufficient_raises_rather_than_writing` | US-301 |
 | Fuite de données du projet | `check_no_cloud_calls.py`, `test_no_consent_blocks_biblio_search` | Transverse |
-| Exécution de code hostile | `test_network_disabled_level1`, `test_filesystem_isolated_level1` | US-004 |
+| Exécution de code hostile | `test_wasm_network_blocked`, `test_wasm_filesystem_isolated_outside_mounts` | US-004 |
 | Dépassement de VRAM | `check_vram_budget.py` | US-006 |
 | Blocage de la base | `test_concurrent_writes_no_lock` | US-001 |
 | Perte de vecteurs orphelins | `test_cascade_delete_source_removes_vectors` | US-002 |

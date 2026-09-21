@@ -16,3 +16,7 @@ build/
 
 # Modèles d embeddings et données locales (US-005) : jamais versionnés.
 data/
+
+# Distribution Pyodide vendorisee (US-004, ADR-010) - hors-ligne, non versionnee.
+# Reconstruire par : cd backend/app/sandbox/runtime && npm install pyodide
+backend/app/sandbox/runtime/

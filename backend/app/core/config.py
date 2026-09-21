@@ -187,6 +187,16 @@ class Settings(BaseSettings):
     # 4 000 lignes brutes n'apprend rien à personne.
     export_log_context_lines: int = 20
 
+    # --- Bac à sable (US-004, ADR-005, ADR-010) --------------------------
+    # Runtime du niveau 1 : Pyodide dans un sous-processus Node. `node` est
+    # cherché dans le PATH ; aucun paquet client n'est empaqueté (§13.1).
+    node_executable: str = "node"
+    # `None` : distribution Pyodide vendorisée sous le paquet sandbox
+    # (backend/app/sandbox/runtime/node_modules/pyodide). ADR-010 : rien n'est
+    # téléchargé au lancement, `indexURL` pointe sur cette copie locale. Le
+    # réglage permet de désigner une autre distribution vendorisée.
+    pyodide_index_url: Path | None = None
+
     @property
     def projects_dir(self) -> Path:
         return self.data_dir / "projects"

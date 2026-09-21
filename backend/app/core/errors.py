@@ -255,3 +255,99 @@ class ModelNotFoundError(AppError):
     @classmethod
     def with_pull_command(cls, model: str) -> ModelNotFoundError:
         return cls.with_command(model, f"ollama pull {model}")
+
+
+# --- Bac à sable d'exécution (US-004, ADR-005) ---------------------------
+
+
+class UnsupportedPlatformError(AppError):
+    """Aucun exécuteur natif pour cette plateforme.
+
+    Le niveau 2 s'appuie sur des primitives d'OS — Job Objects, setrlimit —
+    qui n'existent pas partout. Plutôt qu'un exécuteur factice donnant une
+    fausse impression d'isolation, on refuse explicitement.
+    """
+
+    code = "SANDBOX_UNSUPPORTED_PLATFORM"
+    status_code = 500
+
+    @classmethod
+    def for_platform(cls, platform: str) -> UnsupportedPlatformError:
+        return cls(
+            f"Aucun bac à sable natif pour la plateforme « {platform} ». "
+            "Le niveau natif est fourni pour win32 et linux ; le niveau Wasm, "
+            "lui, est disponible partout.",
+            platform=platform,
+        )
+
+
+class PackageUnavailableInWasmError(AppError):
+    """Import d'un paquet hors de la liste blanche du niveau 1.
+
+    Jamais un échec sec : le message NOMME le paquet manquant et PROPOSE le
+    passage au niveau 2 sous consentement. C'est une décision humaine — un
+    paquet absent du Wasm n'est pas une erreur de code (US-401 ne relance pas
+    l'agent là-dessus), c'est une limite du bac à sable le plus étanche.
+    """
+
+    code = "WASM_PACKAGE_UNAVAILABLE"
+    status_code = 422
+
+    @classmethod
+    def suggest_level2(cls, package: str) -> PackageUnavailableInWasmError:
+        return cls(
+            f"Le paquet « {package} » n'est pas disponible au niveau 1 (WebAssembly). "
+            f"Les paquets admis y sont numpy, pandas, scipy, matplotlib, sympy et "
+            f"scikit-learn. Pour utiliser « {package} », l'exécution doit passer au "
+            "niveau 2 (natif), sous consentement native_execution : c'est une "
+            "décision de l'auteur, pas une correction de code.",
+            package=package,
+            suggested_level=2,
+        )
+
+
+class ConsentRequiredError(AppError):
+    """Niveau 2 demandé sans consentement native_execution accordé.
+
+    Le niveau natif ouvre des capacités que le runtime ne borne plus : réseau
+    sous Windows, disque hors montage. On ne le lance pas sans un accord de
+    périmètre explicite, vérifié avant le démarrage et journalisé.
+    """
+
+    code = "CONSENT_REQUIRED"
+    status_code = 403
+
+    @classmethod
+    def native_execution(cls) -> ConsentRequiredError:
+        return cls(
+            "L'exécution native (niveau 2) exige le consentement de périmètre "
+            "« native_execution », absent pour ce projet. Le niveau natif n'isole "
+            "ni le réseau sous Windows ni le disque hors des montages déclarés : "
+            "l'accorder est une décision de l'auteur. Le niveau 1 (WebAssembly) "
+            "ne demande aucun consentement.",
+            scope="native_execution",
+        )
+
+
+class WasmRuntimeUnavailableError(AppError):
+    """Le runtime Pyodide/Node ne peut pas être démarré.
+
+    ADR-010 : la distribution Pyodide est vendorisée hors-ligne. Son absence
+    est un défaut d'installation, rapporté avec la remédiation, jamais un repli
+    silencieux vers une exécution non isolée.
+    """
+
+    code = "SANDBOX_RUNTIME_UNAVAILABLE"
+    status_code = 503
+
+    @classmethod
+    def actionable(cls, detail: str = "") -> WasmRuntimeUnavailableError:
+        message = (
+            "Le runtime WebAssembly (Pyodide via Node) est indisponible. "
+            "Node.js doit être installé et la distribution Pyodide vendorisée "
+            "sous backend/app/sandbox/runtime (npm install). "
+            "L'exécution isolée de niveau 1 en dépend."
+        )
+        if detail:
+            message = f"{message} Détail : {detail}"
+        return cls(message)
