@@ -140,7 +140,15 @@ CREATE TABLE code_execution (
   stderr        TEXT,
   exit_code     INTEGER,
   duration_ms   INTEGER,
-  started_at    TEXT NOT NULL
+  started_at    TEXT NOT NULL,
+  -- Garantie OBSERVEE a l'execution (US-004, migration 008). Jamais reinferee
+  -- du niveau : au niveau 2 sous Linux elle depend de la reussite d'unshare -n.
+  network_isolation_guaranteed INTEGER NOT NULL DEFAULT 0
+    CHECK (network_isolation_guaranteed IN (0,1)),
+  -- Exposes par le contrat dans l'historique : persistes plutot que reinferes.
+  timed_out      INTEGER NOT NULL DEFAULT 0 CHECK (timed_out IN (0,1)),
+  limit_exceeded TEXT
+    CHECK (limit_exceeded IS NULL OR limit_exceeded IN ('memory','cpu','wall'))
 );
 
 -- Artefacts produits par une execution (US-401, migration 007). Chaque artefact

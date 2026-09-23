@@ -106,6 +106,9 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | Limites natives niveau 2 (mémoire, CPU) | ADR-005 | §8.3 | **US-004** | `test_native_memory_limit_kills_process`, `test_native_cpu_limit_enforced`, `check_sandbox_windows.py`, `check_sandbox_linux.py` |
 | Réseau NON isolé au niveau 2 Windows, déclaré honnêtement | ADR-005 | §8.2 | **US-004** | `test_native_windows_reports_network_not_guaranteed` |
 | Consentement niveau 2 vérifié et exécution persistée | ADR-005 | §8.1 | **US-004** | `test_native_requires_consent`, `test_execution_persisted_with_level` |
+| Garantie d'isolation persistée, jamais réinférée du niveau | ADR-005 | §8.2 | **US-004** | `test_execution_persisted_with_level`, `test_executions_history_matches_contract` |
+| Niveau agent abaissé ET rapporté à l'appelant | ADR-005 | §8.1 | **US-401** | `test_execute_agent_origin_downgraded_to_level1_and_reported` |
+| Routes servies déclarées au contrat normatif | — | §3 | **US-401** | `test_implemented_code_routes_are_declared_in_the_contract` |
 | Renvoi Quarto imposé, label MyST refusé | ADR-006 | §8 | **US-401** | `test_label_must_be_quarto_syntax`, `test_myst_label_rejected` |
 | Nom de fichier sans chemin ni « .. » | ADR-005 | §8 | **US-401** | `test_filename_rejects_path_separator` |
 | Graine obligatoire dès numpy ou random | — | §8 | **US-401** | `test_seed_required_when_numpy_imported` |

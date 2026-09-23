@@ -94,7 +94,8 @@ async def persist_execution(
     async with transaction(conn):
         cur = await conn.execute(
             "INSERT INTO code_execution (project_id, origin, sandbox_level, code, stdout,"
-            " stderr, exit_code, duration_ms, started_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " stderr, exit_code, duration_ms, started_at, network_isolation_guaranteed,"
+            " timed_out, limit_exceeded) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 project_id,
                 origin.value,
@@ -105,6 +106,11 @@ async def persist_execution(
                 result.exit_code,
                 result.duration_ms,
                 datetime.now(UTC).isoformat(),
+                # OBSERVÉ à l'exécution, jamais réinféré du niveau : au niveau 2
+                # sous Linux la garantie dépend de la réussite d'unshare -n.
+                1 if result.network_isolation_guaranteed else 0,
+                1 if result.timed_out else 0,
+                result.limit_exceeded,
             ),
         )
         return int(cur.lastrowid or 0)
@@ -120,12 +126,15 @@ async def run_sandboxed(
     limits: ResourceLimits,
     output_dir,
     platform: str | None = None,
-) -> ExecutionResult:
+) -> tuple[ExecutionResult, int]:
     """Sélectionne, vérifie le consentement au niveau 2, exécute, persiste.
 
     Le consentement est vérifié AVANT le lancement (US-004, point 7) : rien de
     natif ne démarre sans lui. L'origine agent, ramenée au niveau 1, n'en exige
     aucun.
+
+    Rend `(résultat, identifiant d'exécution)` : l'appelant a besoin de l'id
+    persisté, que le contrat expose dans `ExecutionResult.id`.
     """
     executor = select(origin, mode, platform)
     if executor.level == SandboxLevel.NATIVE:
@@ -137,5 +146,5 @@ async def run_sandboxed(
             project_id,
         )
     result = await executor.run(code, mounts, limits, output_dir)
-    await persist_execution(conn, project_id, origin, result, code)
-    return result
+    execution_id = await persist_execution(conn, project_id, origin, result, code)
+    return result, execution_id

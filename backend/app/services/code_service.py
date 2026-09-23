@@ -32,7 +32,12 @@ from app.core.config import get_settings
 from app.core.errors import AppError
 from app.core.logging import get_logger
 from app.llm.manager import LLMManager
-from app.models.code import CodeExecutionOut, CodeProposal, ExpectedArtifact
+from app.models.code import (
+    CodeExecutionOut,
+    CodeProposal,
+    ExecutionResultOut,
+    ExpectedArtifact,
+)
 from app.sandbox import factory
 from app.sandbox.base import MountSpec, ResourceLimits, SandboxMode, SandboxOrigin
 from app.services import artifact_service, task_service
@@ -229,12 +234,93 @@ async def _execution_out(conn: aiosqlite.Connection, exec_id: int) -> CodeExecut
     )
 
 
-async def list_executions(conn: aiosqlite.Connection, project_id: int) -> list[CodeExecutionOut]:
+_LEVEL_OF = {"wasm": 1, "native": 2}
+
+_RESULT_SELECT = (
+    "SELECT id, exit_code, stdout, stderr, duration_ms, sandbox_level, timed_out,"
+    " limit_exceeded, network_isolation_guaranteed FROM code_execution"
+)
+
+
+async def _result_out(conn: aiosqlite.Connection, row) -> ExecutionResultOut:
+    """Ligne `code_execution` -> `ExecutionResult` du contrat.
+
+    Les garanties sont RELUES, jamais réinférées du niveau : une exécution
+    native sous Linux peut avoir obtenu ou non son namespace réseau.
+    """
+    exec_id = int(row[0])
+    artefacts = await artifact_service.list_for_execution(conn, exec_id)
+    return ExecutionResultOut(
+        id=exec_id,
+        exit_code=int(row[1]) if row[1] is not None else 0,
+        stdout=str(row[2] or ""),
+        stderr=str(row[3] or ""),
+        duration_ms=int(row[4]) if row[4] is not None else 0,
+        level=_LEVEL_OF[str(row[5])],  # type: ignore[arg-type]
+        timed_out=bool(row[6]),
+        limit_exceeded=row[7],
+        network_isolation_guaranteed=bool(row[8]),
+        artifacts=[a.rel_path for a in artefacts],
+    )
+
+
+async def list_executions(conn: aiosqlite.Connection, project_id: int) -> list[ExecutionResultOut]:
+    """Historique, au format `ExecutionResult` du contrat (US-004)."""
     async with conn.execute(
-        "SELECT id FROM code_execution WHERE project_id = ? ORDER BY id DESC", (project_id,)
+        f"{_RESULT_SELECT} WHERE project_id = ? ORDER BY id DESC", (project_id,)
     ) as cur:
-        ids = [int(r[0]) for r in await cur.fetchall()]
-    return [await _execution_out(conn, i) for i in ids]
+        lignes = await cur.fetchall()
+    return [await _result_out(conn, r) for r in lignes]
+
+
+async def execute_direct(
+    conn: aiosqlite.Connection,
+    project_id: int,
+    origin: SandboxOrigin,
+    mode: SandboxMode,
+    code: str,
+    datasets: list[str],
+    limits: ResourceLimits,
+    known_datasets: dict[str, Path],
+) -> ExecutionResultOut:
+    """Exécution DIRECTE d'un code fourni (US-004), telle que décrite au contrat.
+
+    Distincte du pipeline d'US-401 : aucun agent, aucun rapprochement
+    d'artefacts, aucune boucle de correction. Le niveau demandé est respecté
+    pour une origine utilisateur — sous consentement au niveau natif — et
+    ramené au niveau 1 pour une origine agent, l'abaissement étant rapporté.
+    """
+    resolved = resolve_datasets(project_id, datasets, known_datasets)
+    mounts = [MountSpec(host_path=h, guest_path=g, writable=False) for _, h, g in resolved]
+    output_dir = _artifacts_root(project_id) / f"exec-{_stamp()}"
+
+    result, exec_id = await factory.run_sandboxed(
+        conn, project_id, origin, mode, code, mounts, limits, output_dir
+    )
+    racine = get_settings().data_dir
+    return ExecutionResultOut(
+        id=exec_id,
+        exit_code=result.exit_code,
+        stdout=result.stdout,
+        stderr=result.stderr,
+        duration_ms=result.duration_ms,
+        level=int(result.level),  # type: ignore[arg-type]
+        timed_out=result.timed_out,
+        limit_exceeded=result.limit_exceeded,
+        network_isolation_guaranteed=result.network_isolation_guaranteed,
+        # Un agent qui demande le natif est ramené au niveau 1 : on le DIT.
+        downgraded_from_requested_mode=(
+            origin == SandboxOrigin.AGENT and mode == SandboxMode.NATIVE
+        ),
+        artifacts=[_relative(p, racine) for p in result.artifacts],
+    )
+
+
+def _relative(chemin: Path, racine: Path) -> str:
+    try:
+        return chemin.relative_to(racine).as_posix()
+    except ValueError:  # hors du répertoire de données : on rend le nom seul
+        return chemin.name
 
 
 async def execute(

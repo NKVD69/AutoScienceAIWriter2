@@ -562,6 +562,40 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/DraftSection' }
 
+  /projects/{projectId}/code/propose:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [code]
+      summary: Faire produire une analyse par l'agent
+      description: |
+        L'agent code écrit le script, le serveur l'exécute au niveau Wasm
+        (ADR-005), puis rapproche les artefacts attendus des artefacts
+        réellement produits. Un attendu absent relance l'agent avec un message
+        précis ; un produit non déclaré est conservé et signalé, jamais
+        rattaché seul. La boucle de correction est plafonnée (US-202), et une
+        indisponibilité de paquet ne relance pas l'agent : elle remonte avec la
+        proposition du niveau natif, qui est une décision humaine.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [intent]
+              properties:
+                intent: { type: string }
+                datasets:
+                  type: array
+                  items: { type: string }
+      responses:
+        '200':
+          description: Exécution retenue et ses artefacts
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CodeRun' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
   /projects/{projectId}/code/execute:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -610,6 +644,49 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/ExecutionResult' }
+
+  /projects/{projectId}/sections/{sectionId}/artifacts/{artifactId}/attach:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/SectionId'
+      - $ref: '#/components/parameters/ArtifactId'
+    post:
+      tags: [code]
+      summary: Rattacher un artefact à une section
+      description: |
+        Insère le renvoi Quarto dans content_qmd s'il n'y figure pas déjà —
+        ![légende](chemin){#label} pour une figure (ADR-006). L'opération est
+        IDEMPOTENTE : un artefact déjà référencé n'ajoute pas un second renvoi.
+        Seuls une figure et un tableau se rattachent ; un artefact de données
+        n'a pas de renvoi dans le texte.
+      responses:
+        '200':
+          description: Section mise à jour, renvoi inséré
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DraftSection' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /projects/{projectId}/artifacts/{artifactId}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ArtifactId'
+    delete:
+      tags: [code]
+      summary: Supprimer un artefact
+      description: |
+        Refusée avec 409 si l'artefact est référencé dans une section : le
+        supprimer laisserait un renvoi sans cible et ferait échouer la
+        compilation des semaines plus tard (US-502).
+      responses:
+        '204': { description: Artefact supprimé }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Artefact référencé dans une section
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   /projects/{projectId}/export:
     parameters:
@@ -874,6 +951,11 @@ components:
       schema: { type: integer }
     SectionId:
       name: sectionId
+      in: path
+      required: true
+      schema: { type: integer }
+    ArtifactId:
+      name: artifactId
       in: path
       required: true
       schema: { type: integer }
@@ -1196,6 +1278,62 @@ components:
         artifacts:
           type: array
           items: { type: string }
+
+    Artifact:
+      type: object
+      description: |
+        Fichier produit par une exécution, porteur de quoi le REPRODUIRE :
+        code exact, graine, versions des bibliothèques relevées dans le bac à
+        sable, SHA-256 des jeux de données (US-401). Sans le SHA-256, la
+        question « comment cette figure a-t-elle été obtenue » reste sans
+        réponse complète : un fichier modifié depuis en produirait une autre.
+      required: [id, code_execution_id, kind, filename, rel_path, declared]
+      properties:
+        id: { type: integer }
+        code_execution_id: { type: integer }
+        draft_section_id: { type: integer, nullable: true }
+        kind: { type: string, enum: [figure, table, data] }
+        filename: { type: string }
+        label:
+          type: string
+          nullable: true
+          description: Renvoi Quarto — fig-<slug> ou tbl-<slug>. Jamais du MyST.
+        caption: { type: string, nullable: true }
+        rel_path:
+          type: string
+          description: Chemin relatif au répertoire de données, jamais absolu.
+        declared:
+          type: boolean
+          description: |
+            Faux pour un artefact produit mais NON déclaré : conservé et
+            signalé, jamais rattaché automatiquement à une section.
+        random_seed: { type: integer, nullable: true }
+        library_versions:
+          type: object
+          additionalProperties: { type: string }
+        dataset_sha256:
+          type: object
+          additionalProperties: { type: string }
+        duration_ms: { type: integer, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    CodeRun:
+      type: object
+      description: |
+        Exécution retenue d'une proposition d'agent, et ses artefacts (US-401).
+        Distincte d'`ExecutionResult`, qui décrit une exécution directe sans
+        rapprochement d'artefacts.
+      required: [id, origin, sandbox_level, exit_code, duration_ms, started_at]
+      properties:
+        id: { type: integer }
+        origin: { type: string, enum: [agent, user] }
+        sandbox_level: { type: string, enum: [wasm, native] }
+        exit_code: { type: integer }
+        duration_ms: { type: integer }
+        started_at: { type: string, format: date-time }
+        artifacts:
+          type: array
+          items: { $ref: '#/components/schemas/Artifact' }
 
     PlagiarismScope:
       type: string

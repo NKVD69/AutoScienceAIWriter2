@@ -8,11 +8,13 @@ bac à sable factice — aucun runtime Pyodide, aucun moteur réel.
 from __future__ import annotations
 
 import hashlib
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
 import pytest
+import yaml
 
 from app.core.config import get_settings
 from app.db.migrations.runner import run_migrations
@@ -21,13 +23,15 @@ from app.db.session import connect, transaction
 from app.main import create_app
 from app.models.code import ExpectedArtifact
 from app.rag import retriever
+from app.sandbox.base import SandboxLevel
 from app.services import artifact_service, code_service, task_service
 from app.services.artifact_service import ArtifactReferencedError
-from tests.tests_agents.test_code_agent import FakeSandbox, _proposal_obj, _proposal_reply
+from tests.tests_agents.test_code_agent import FakeSandbox, _proposal_reply
 from tests.tests_api.test_sections_api import brancher_modele, projet_pret
 
 NOW = datetime.now(UTC).isoformat()
 DIM = 768
+CONTRAT = Path(__file__).resolve().parents[3] / "contracts" / "openapi.yaml"
 
 
 # --- Fixtures -------------------------------------------------------------
@@ -200,53 +204,160 @@ async def test_delete_unreferenced_artifact_succeeds(conn) -> None:
 # --- API HTTP -------------------------------------------------------------
 
 
-def _brancher_sandbox(monkeypatch, sandbox: FakeSandbox) -> None:
+def _brancher_sandbox(monkeypatch, sandbox) -> None:
     monkeypatch.setattr(code_service.factory, "select", lambda *a, **k: sandbox)
 
 
-async def test_execute_endpoint_persists_execution_with_level(
+class FakeNativeSandbox(FakeSandbox):
+    """Même bac factice, mais de niveau 2 : sert à éprouver le consentement."""
+
+    level = SandboxLevel.NATIVE
+
+
+async def test_propose_endpoint_runs_pipeline_and_returns_artifacts(
     client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """`propose` : l'agent écrit, le serveur exécute et rapproche."""
     pid, _, _, _ = await projet_pret(client)
     brancher_modele(monkeypatch, [_proposal_reply()])
     _brancher_sandbox(monkeypatch, FakeSandbox([{"files": ["filtration.png"]}]))
-
-    payload = _proposal_obj().model_dump()
-    r = await client.post(f"/api/v1/projects/{pid}/code/execute", json=payload)
-
-    assert r.status_code == 200
-    corps = r.json()
-    assert corps["sandbox_level"] == "wasm"  # exécution tracée avec son niveau
-    assert [a["filename"] for a in corps["artifacts"]] == ["filtration.png"]
-
-    liste = (await client.get(f"/api/v1/projects/{pid}/code/executions")).json()
-    assert len(liste) == 1
-    assert liste[0]["sandbox_level"] == "wasm"
-
-
-async def test_propose_endpoint_returns_a_validated_proposal(
-    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    pid, _, _, _ = await projet_pret(client)
-    brancher_modele(monkeypatch, [_proposal_reply(intent="tracer la filtration")])
 
     r = await client.post(
         f"/api/v1/projects/{pid}/code/propose", json={"intent": "tracer", "datasets": []}
     )
 
     assert r.status_code == 200
-    assert r.json()["expected_artifacts"][0]["label"] == "fig-filtration"
+    corps = r.json()
+    assert corps["sandbox_level"] == "wasm"
+    assert [a["filename"] for a in corps["artifacts"]] == ["filtration.png"]
+    assert corps["artifacts"][0]["declared"] is True
+
+
+async def test_execute_endpoint_runs_directly_and_matches_contract(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`execute` est l'exécution DIRECTE d'US-004 : un code, une origine, un mode."""
+    pid, _, _, _ = await projet_pret(client)
+    _brancher_sandbox(monkeypatch, FakeSandbox([{"files": ["sortie.txt"]}]))
+
+    r = await client.post(
+        f"/api/v1/projects/{pid}/code/execute",
+        json={"code": "print('ok')", "origin": "user", "mode": "wasm"},
+    )
+
+    assert r.status_code == 200
+    corps = r.json()
+    for champ in ("exit_code", "stdout", "stderr", "duration_ms", "level"):
+        assert champ in corps
+    assert corps["level"] == 1  # entier, comme au contrat
+    assert corps["network_isolation_guaranteed"] is True
+    assert corps["downgraded_from_requested_mode"] is False
+    assert corps["artifacts"] == [a for a in corps["artifacts"] if isinstance(a, str)]
+
+
+async def test_execute_agent_origin_downgraded_to_level1_and_reported(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Un agent qui demande le natif obtient le niveau 1, et on le DIT."""
+    pid, _, _, _ = await projet_pret(client)
+    _brancher_sandbox(monkeypatch, FakeSandbox([{"files": []}]))
+
+    r = await client.post(
+        f"/api/v1/projects/{pid}/code/execute",
+        json={"code": "print('ok')", "origin": "agent", "mode": "native"},
+    )
+
+    assert r.status_code == 200
+    assert r.json()["level"] == 1
+    assert r.json()["downgraded_from_requested_mode"] is True
+
+
+async def test_execute_native_without_consent_is_403(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Le niveau 2 sans consentement native_execution ne démarre pas."""
+    pid, _, _, _ = await projet_pret(client)
+    natif = FakeNativeSandbox([{"files": []}])
+    _brancher_sandbox(monkeypatch, natif)
+
+    r = await client.post(
+        f"/api/v1/projects/{pid}/code/execute",
+        json={"code": "print('ok')", "origin": "user", "mode": "native"},
+    )
+
+    assert r.status_code == 403
+    assert r.json()["code"] == "CONSENT_REQUIRED"
+    assert natif.calls == [], "rien ne démarre avant le consentement"
+
+
+async def test_executions_history_matches_contract(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pid, _, _, _ = await projet_pret(client)
+    _brancher_sandbox(monkeypatch, FakeSandbox([{"files": ["sortie.txt"]}]))
+    await client.post(
+        f"/api/v1/projects/{pid}/code/execute",
+        json={"code": "print('ok')", "origin": "user", "mode": "wasm"},
+    )
+
+    liste = (await client.get(f"/api/v1/projects/{pid}/code/executions")).json()
+
+    assert len(liste) == 1
+    requis = [
+        "exit_code",
+        "stdout",
+        "stderr",
+        "duration_ms",
+        "level",
+        "network_isolation_guaranteed",
+    ]
+    for champ in requis:
+        assert champ in liste[0], f"{champ} est obligatoire au contrat"
+    assert liste[0]["level"] in (1, 2)
+    # La garantie est RELUE de la base, pas réinférée du niveau.
+    assert liste[0]["network_isolation_guaranteed"] is True
 
 
 async def test_execute_endpoint_rejects_unknown_dataset(
     client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     pid, _, _, _ = await projet_pret(client)
-    brancher_modele(monkeypatch, [_proposal_reply()])
-    _brancher_sandbox(monkeypatch, FakeSandbox([{"files": ["filtration.png"]}]))
+    sandbox = FakeSandbox([{"files": []}])
+    _brancher_sandbox(monkeypatch, sandbox)
 
-    payload = _proposal_obj(datasets=["inexistant"]).model_dump()
-    r = await client.post(f"/api/v1/projects/{pid}/code/execute", json=payload)
+    r = await client.post(
+        f"/api/v1/projects/{pid}/code/execute",
+        json={"code": "print('ok')", "origin": "user", "datasets": ["inexistant"]},
+    )
 
     assert r.status_code == 422
     assert r.json()["code"] == "UNKNOWN_DATASET"
+    assert sandbox.calls == [], "refus AVANT toute exécution"
+
+
+# --- Conformité au contrat ------------------------------------------------
+
+
+def _chemin_contrat(route: str) -> str:
+    """`/api/v1/projects/{project_id}/...` -> `/projects/{projectId}/...`."""
+    sans_prefixe = route.removeprefix("/api/v1")
+
+    def camel(m: re.Match[str]) -> str:
+        tete, *reste = m.group(1).split("_")
+        return "{" + tete + "".join(p.title() for p in reste) + "}"
+
+    return re.sub(r"\{(\w+)\}", camel, sans_prefixe)
+
+
+def test_implemented_code_routes_are_declared_in_the_contract() -> None:
+    """Le contrat est normatif : une route servie qu'il ignore est un défaut."""
+    contrat = yaml.safe_load(CONTRAT.read_text(encoding="utf-8"))["paths"]
+    # L'OpenAPI que FastAPI génère est la liste de ce qui est RÉELLEMENT servi.
+    servies = {
+        _chemin_contrat(c)
+        for c in create_app().openapi()["paths"]
+        if "/code/" in c or "/artifacts/" in c
+    }
+    assert servies, "aucune route de code trouvée"
+    absentes = sorted(p for p in servies if p not in contrat)
+    assert absentes == [], f"routes servies mais absentes du contrat : {absentes}"

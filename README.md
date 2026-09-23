@@ -107,6 +107,52 @@ commencer : un texte écrit sans matière serait rempli de mémoire par le
 modèle, c'est-à-dire d'affirmations sans source présentées comme si elles en
 avaient une.
 
+## Exécution de code
+
+Le code écrit par une IA est le moins fiable du système : il reçoit donc
+l'isolation la plus forte. Deux niveaux, et le serveur seul décide du niveau
+effectif ([ADR-005](docs/adr/ADR-005-sandbox-deux-niveaux.md)).
+
+| Niveau | Moteur | Réseau | Disque | Consentement |
+|---|---|---|---|---|
+| **1** | WebAssembly (Pyodide) | isolé, sur tout OS | hors montages déclarés : inaccessible | aucun |
+| **2** | natif contraint | **non isolé sous Windows** | accessible | `native_execution` |
+
+**Tout code d'origine agent s'exécute au niveau 1**, quel que soit le niveau
+demandé. L'abaissement n'est pas une erreur : il est silencieux, journalisé, et
+rapporté dans `downgraded_from_requested_mode`. Un agent ne choisit jamais sa
+propre isolation.
+
+Le champ `network_isolation_guaranteed` est **honnête par construction** et
+persisté avec chaque exécution. Faux au niveau 2 sous Windows : les Job Objects
+bornent la mémoire, le CPU et le nombre de processus, mais n'ont aucune prise
+sur les sockets. Sous Linux, il n'est vrai que si `unshare -n` a réellement
+abouti — il n'est donc jamais déduit du niveau, toujours relu de ce qui a été
+observé.
+
+### Prérequis
+
+Le niveau 1 demande **Node.js** et une distribution **Pyodide vendorisée
+hors-ligne** : rien n'est téléchargé au lancement (ADR-010).
+
+```bash
+cd backend/app/sandbox/runtime && npm install pyodide
+```
+
+Ce répertoire n'est pas versionné. Sans lui, l'exécution de niveau 1 est
+refusée avec la marche à suivre, et les tests d'isolation Wasm sautent — ils ne
+sont jamais conditionnés à la plateforme, seulement à la présence du runtime,
+puisque la garantie est la même partout.
+
+Le niveau 2 sous Windows repose sur **pywin32**, posé par
+`pip install -e ".[dev]"` (dépendance déclarée `sys_platform == 'win32'`).
+
+**Seul Pyodide « core » est vendorisé.** Les roues scientifiques — numpy,
+pandas, scipy, matplotlib, sympy, scikit-learn — ne le sont pas encore : une
+figure demandée à un agent n'est donc pas encore rendue au niveau 1, et le test
+de bout en bout correspondant saute. Les garde-fous d'isolation, eux, sont
+éprouvés sans elles.
+
 ## Export
 
 Le format canonique est **Quarto** (`.qmd`), et lui seul —
@@ -175,7 +221,14 @@ L'API est liée à la boucle locale et n'est jamais exposée sur le réseau.
 .venv/Scripts/python scripts/check_no_cloud_calls.py
 .venv/Scripts/python scripts/check_quarto_export.py # code 2 si Quarto est absent
 .venv/Scripts/python scripts/check_llm_latency.py   # si le moteur est joignable
+.venv/Scripts/python scripts/check_sandbox_windows.py # ou check_sandbox_linux.py
 ```
+
+`check_sandbox_*` exerce les cinq sondes aux deux niveaux — inoffensive, réseau,
+disque hors montage, dépassement mémoire, boucle infinie — et compare le résultat
+aux garanties **déclarées** pour la plateforme. Que le niveau 2 sous Windows
+joigne le réseau est donc un résultat ATTENDU, pas un échec. La sonde réseau vise
+un écho TCP local : rien ne quitte la machine.
 
 Un script indisponible faute d'environnement — pas de GPU, pas d'Ollama, pas de
 Quarto — sort en code 2 : ce n'est pas un échec. Un script qui sort en 1 en est un.
@@ -194,8 +247,11 @@ Quarto — sort en code 2 : ce n'est pas un échec. Un script qui sort en 1 en e
 | US-201/202 | Machine à états, guardrails, circuit breaker | livrée |
 | US-PLAN-001 | Plan : génération, édition, validation | livrée |
 | US-301 | Rédaction de section sourcée, garde-fous de véracité | livrée |
+| US-302 | Relecture hiérarchisée et score de qualité | livrée |
 | US-501 | Bibliographie compilée depuis les citations vérifiées | livrée |
 | US-502 | Export Quarto multi-format, journal analysé | livrée |
+| US-004 | Bac à sable à deux niveaux, Wasm et natif contraint | livrée |
+| US-401 | Agent d'analyse, figures reproductibles, artefacts | livrée (roues scientifiques à vendoriser) |
 
 Chemin critique complet et ordre de traitement : [`docs/plan-execution.md`](docs/plan-execution.md).
 

@@ -135,3 +135,28 @@ class CodeExecutionOut(BaseModel):
     duration_ms: int
     started_at: str
     artifacts: list[ArtifactOut] = []
+
+
+class ExecutionResultOut(BaseModel):
+    """`ExecutionResult` du contrat — exécution directe et historique (US-004).
+
+    Reprend EXACTEMENT le schéma normatif de `contracts/openapi.yaml` : le
+    niveau y est un entier (1 ou 2), et `artifacts` une liste de chemins. Les
+    champs `timed_out`, `limit_exceeded` et `network_isolation_guaranteed` sont
+    relus de la base, jamais réinférés du niveau — au niveau 2 sous Linux, la
+    garantie dépend de la réussite d'`unshare -n`.
+    """
+
+    id: int | None = None
+    exit_code: int
+    stdout: str
+    stderr: str
+    duration_ms: int
+    level: Literal[1, 2]
+    timed_out: bool = False
+    limit_exceeded: Literal["memory", "cpu", "wall"] | None = None
+    network_isolation_guaranteed: bool
+    # Vrai quand un niveau natif demandé a été ramené au niveau 1 : un agent ne
+    # choisit jamais son isolation (ADR-005), et l'abaissement est dit, pas tu.
+    downgraded_from_requested_mode: bool = False
+    artifacts: list[str] = []

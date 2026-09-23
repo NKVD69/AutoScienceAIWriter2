@@ -126,7 +126,7 @@ async def test_execution_persisted_with_level(projet_db, tmp_path) -> None:
             " VALUES (1, 'native_execution', 1, ?)",
             (NOW,),
         )
-    result = await run_sandboxed(
+    result, execution_id = await run_sandboxed(
         projet_db,
         1,
         SandboxOrigin.USER,
@@ -137,11 +137,16 @@ async def test_execution_persisted_with_level(projet_db, tmp_path) -> None:
         tmp_path / "out",
     )
     assert result.level == SandboxLevel.NATIVE
+    assert execution_id > 0
     async with projet_db.execute(
-        "SELECT origin, sandbox_level, exit_code FROM code_execution"
+        "SELECT id, origin, sandbox_level, exit_code, network_isolation_guaranteed"
+        " FROM code_execution"
     ) as cur:
         lignes = await cur.fetchall()
     assert len(lignes) == 1
-    assert lignes[0][0] == "user"
-    assert lignes[0][1] == "native"  # le niveau est en clair, pas un entier
-    assert lignes[0][2] == 0
+    assert lignes[0][0] == execution_id
+    assert lignes[0][1] == "user"
+    assert lignes[0][2] == "native"  # le niveau est en clair, pas un entier
+    assert lignes[0][3] == 0
+    # La garantie OBSERVÉE est persistée, jamais réinférée du niveau (ADR-005).
+    assert lignes[0][4] == (1 if result.network_isolation_guaranteed else 0)
