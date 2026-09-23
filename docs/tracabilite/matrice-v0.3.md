@@ -39,7 +39,7 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | Rédaction de section sourcée | §5.4, §5.5 | US-301 | P1 | **Livrée** |
 | Relecture et score de qualité | §5.4 | US-302 | P1 | **Livrée** |
 | Distinction fait sourcé / hypothèse | §5.5 | US-301, US-302 | P1 | **Livrée** |
-| Exécution de code Python | §8 | US-004, US-401 | P0/P1 | **Livrée** (US-004 : moteur) |
+| Exécution de code Python | §8 | US-004, US-401 | P0/P1 | **Livrée** |
 | Éditeur de code Monaco | §2 | US-UI-003 | P1 | À implémenter |
 | Notebooks Jupyter | — | US-JUP-001 | P2 | Non planifié |
 | Codes externes OpenFOAM / Serpent | §8.3 | US-CALC-001 | P2 | Non planifié |
@@ -106,6 +106,17 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | Limites natives niveau 2 (mémoire, CPU) | ADR-005 | §8.3 | **US-004** | `test_native_memory_limit_kills_process`, `test_native_cpu_limit_enforced`, `check_sandbox_windows.py`, `check_sandbox_linux.py` |
 | Réseau NON isolé au niveau 2 Windows, déclaré honnêtement | ADR-005 | §8.2 | **US-004** | `test_native_windows_reports_network_not_guaranteed` |
 | Consentement niveau 2 vérifié et exécution persistée | ADR-005 | §8.1 | **US-004** | `test_native_requires_consent`, `test_execution_persisted_with_level` |
+| Renvoi Quarto imposé, label MyST refusé | ADR-006 | §8 | **US-401** | `test_label_must_be_quarto_syntax`, `test_myst_label_rejected` |
+| Nom de fichier sans chemin ni « .. » | ADR-005 | §8 | **US-401** | `test_filename_rejects_path_separator` |
+| Graine obligatoire dès numpy ou random | — | §8 | **US-401** | `test_seed_required_when_numpy_imported` |
+| Code d'agent toujours exécuté au niveau 1 | ADR-005 | §8 | **US-401** | `test_agent_origin_always_level1` |
+| Jeu de données inconnu refusé avant exécution | ADR-008 | §8 | **US-401** | `test_unknown_dataset_rejected_before_execution` |
+| Attendu absent relance ; inattendu conservé, non rattaché seul | ADR-008 | §8 | **US-401** | `test_missing_expected_artifact_reruns_agent`, `test_undeclared_artifact_kept_but_flagged_and_not_attached` |
+| Paquet absent ne relance pas l'agent (décision humaine) | ADR-005 | §8 | **US-401** | `test_package_unavailable_does_not_rerun_agent` |
+| Boucle de correction plafonnée (US-202) | ADR-008 | §5.3 | **US-401** | `test_correction_loop_capped_at_three` |
+| Reproductibilité : graine, versions, SHA-256 des données | ADR-009 | §8 | **US-401** | `test_artifact_records_seed_and_library_versions`, `test_dataset_sha256_computed_and_recorded` |
+| Rattachement insère le renvoi Quarto, idempotent | ADR-006 | §8 | **US-401** | `test_attach_inserts_quarto_reference`, `test_attach_is_idempotent` |
+| Suppression d'un artefact référencé refusée (409) | ADR-006 | §8 | **US-401** | `test_delete_referenced_artifact_returns_409` |
 | Quarto `.qmd` canonique | ADR-006 | §9.1 | **US-502** | `test_assembler_respects_plan_order`, `test_assembler_emits_stable_section_ids` |
 | Absence de MyST canonique | ADR-006 | §9.1 | **US-502** | `test_no_myst_syntax_in_assembled_document` |
 | Renvois croisés résolus | ADR-006 | §9.2 | **US-502** | `test_log_parser_detects_unresolved_crossref`, `check_quarto_export.py` |
@@ -163,7 +174,7 @@ Relie exigences du cahier des charges V3 → décisions d'architecture (ADR) →
 | **US-PLAN-001** | Plan : génération, édition, validation | P0 | US-003, US-201 | ✅ `PROMPT-US-PLAN-001.md` | **Livrée** |
 | **US-301** | Rédaction de section sourcée | P1 | US-PLAN-001, US-102 | ✅ `PROMPT-US-301.md` | **Livrée** |
 | **US-302** | Relecture et score | P1 | US-301 | ✅ `PROMPT-US-302.md` | **Livrée** |
-| US-401 | Exécution de script | P1 | US-004 | ✅ `PROMPT-US-401.md` | Prêt |
+| **US-401** | Exécution de script | P1 | US-004 | ✅ `PROMPT-US-401.md` | **Livrée** |
 | **US-501** | BibTeX dynamique | P1 | US-301 | ✅ `PROMPT-US-501-502.md` | **Livrée** |
 | **US-502** | Export Quarto | P1 | US-501 | ✅ `PROMPT-US-501-502.md` | **Livrée** |
 | US-EXPORT-003 | Déclaration d'usage de l'IA | P1 | US-701, US-502 | ✅ `PROMPT-US-EXPORT-003.md` | Prêt |

@@ -178,3 +178,22 @@ def review_target(verdict: str, auto_correct: bool, breaker_tripped: bool) -> Wo
     if auto_correct and verdict in ("needs_work", "insufficient"):
         return WorkflowState.SECTION_CORRECTING
     return None
+
+
+# --- Nœud code (US-401) ---------------------------------------------------
+
+
+def code_correction_target(reconciled: bool, breaker_tripped: bool) -> WorkflowState | None:
+    """Cible après une tentative d'exécution de code (US-401, §8).
+
+    L'exécution de code est une activité INTERNE au travail de section : §5.2 ne
+    lui déclare pas d'état propre, et elle ne franchit aucune porte humaine. Deux
+    issues seulement : la boucle de correction a convergé — le code s'est exécuté
+    et les artefacts attendus sont là — et il n'y a rien à signaler au graphe
+    (`None`) ; ou elle a épuisé son plafond (US-202) sans y parvenir, et le graphe
+    s'arrête en `ERROR_STATE`. Rendre malgré tout un résultat serait livrer une
+    figure qu'on sait absente ou fausse — précisément ce que le produit refuse.
+    """
+    if breaker_tripped and not reconciled:
+        return WorkflowState.ERROR_STATE
+    return None

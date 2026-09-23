@@ -143,6 +143,28 @@ CREATE TABLE code_execution (
   started_at    TEXT NOT NULL
 );
 
+-- Artefacts produits par une execution (US-401, migration 007). Chaque artefact
+-- conserve de quoi le reproduire (code, graine, versions, SHA-256 des donnees) ;
+-- `declared` distingue l'attendu de l'inattendu ; `draft_section_id` est
+-- NULLABLE et en SET NULL : un artefact survit a la suppression de son noeud.
+CREATE TABLE artifact (
+  id                    INTEGER PRIMARY KEY,
+  code_execution_id     INTEGER NOT NULL REFERENCES code_execution(id) ON DELETE CASCADE,
+  draft_section_id      INTEGER REFERENCES draft_section(id) ON DELETE SET NULL,
+  kind                  TEXT NOT NULL CHECK (kind IN ('figure','table','data')),
+  filename              TEXT NOT NULL,
+  label                 TEXT,
+  caption               TEXT,
+  rel_path              TEXT NOT NULL,
+  declared              INTEGER NOT NULL DEFAULT 1 CHECK (declared IN (0,1)),
+  code                  TEXT NOT NULL,
+  random_seed           INTEGER,
+  library_versions_json TEXT,
+  dataset_sha256_json   TEXT,
+  duration_ms           INTEGER,
+  created_at            TEXT NOT NULL
+);
+
 CREATE TABLE task (
   id           INTEGER PRIMARY KEY,
   project_id   INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
@@ -219,3 +241,5 @@ CREATE UNIQUE INDEX idx_audit_prev ON audit_log(project_id, prev_hash);
 CREATE INDEX idx_chunk_section ON chunk(source_id, section_kind);
 CREATE INDEX idx_draft_status ON draft_section(status);
 CREATE INDEX idx_review_section ON review_report(draft_section_id, id);
+CREATE INDEX idx_artifact_execution ON artifact(code_execution_id);
+CREATE INDEX idx_artifact_section ON artifact(draft_section_id);

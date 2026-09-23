@@ -29,24 +29,24 @@ def migrations_copy(tmp_path: Path) -> Path:
 
 
 async def test_discover_is_ordered(migrations_copy: Path) -> None:
-    """L'ordre est numerique, pas lexicographique : 010 vient apres 007.
+    """L'ordre est numerique, pas lexicographique : 010 vient apres 008.
 
     Les deux fichiers ajoutes portent des numeros LIBRES : reutiliser celui
-    d'une migration reelle ferait echouer le test sur une collision de cle
-    primaire dans `schema_migration`, pour une raison sans rapport avec
+    d'une migration reelle (001 a 007) ferait echouer le test sur une collision
+    de cle primaire dans `schema_migration`, pour une raison sans rapport avec
     l'ordre qu'il verifie.
     """
     (migrations_copy / "010_dix.sql").write_text("SELECT 1;", encoding="utf-8")
-    (migrations_copy / "007_sept.sql").write_text("SELECT 1;", encoding="utf-8")
+    (migrations_copy / "008_huit.sql").write_text("SELECT 1;", encoding="utf-8")
     versions = [v for v, _ in discover(migrations_copy)]
     assert versions == sorted(versions)
-    assert versions == [1, 2, 3, 4, 5, 6, 7, 10]
+    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 10]
 
 
 async def test_migrations_apply_schema(project_db: Path) -> None:
     async with connect(project_db) as conn:
         applied = await run_migrations(conn)
-        assert applied == [1, 2, 3, 4, 5, 6]
+        assert applied == [1, 2, 3, 4, 5, 6, 7]
         async with conn.execute(
             "SELECT name FROM sqlite_master WHERE type IN ('table','trigger')"
         ) as cur:
@@ -67,6 +67,7 @@ async def test_migrations_apply_schema(project_db: Path) -> None:
         "model_config",
         "vec_chunk",
         "chunk_after_delete",
+        "artifact",
     ):
         assert table in names, f"{table} absente du schema applique"
 
@@ -100,9 +101,9 @@ async def test_migrations_idempotent(project_db: Path) -> None:
         first = await run_migrations(conn)
         second = await run_migrations(conn)
         versions = await applied_versions(conn)
-    assert first == [1, 2, 3, 4, 5, 6]
+    assert first == [1, 2, 3, 4, 5, 6, 7]
     assert second == []
-    assert set(versions) == {1, 2, 3, 4, 5, 6}
+    assert set(versions) == {1, 2, 3, 4, 5, 6, 7}
 
 
 async def test_migrations_detect_modified_file(project_db: Path, migrations_copy: Path) -> None:
